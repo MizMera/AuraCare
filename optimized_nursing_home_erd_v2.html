@@ -1,0 +1,145 @@
+
+<div id="erd" style="padding:8px 0"></div>
+<style>
+#erd svg { max-width:100%; }
+#erd svg.erDiagram .row-rect-odd path,
+#erd svg.erDiagram .row-rect-odd rect,
+#erd svg.erDiagram .row-rect-even path,
+#erd svg.erDiagram .row-rect-even rect { stroke: none !important; }
+</style>
+<script type="module">
+import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+await document.fonts.ready;
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  fontFamily: '"Anthropic Sans", sans-serif',
+  themeVariables: {
+    darkMode: dark,
+    fontSize: '13px',
+    fontFamily: '"Anthropic Sans", sans-serif',
+    lineColor: dark ? '#9c9a92' : '#73726c',
+    textColor: dark ? '#c2c0b6' : '#3d3d3a',
+    primaryColor: dark ? '#2a2a3a' : '#eeedfe',
+    primaryBorderColor: dark ? '#534AB7' : '#534AB7',
+    primaryTextColor: dark ? '#c2c0b6' : '#26215C',
+    secondaryColor: dark ? '#1a2a2a' : '#e1f5ee',
+    secondaryBorderColor: dark ? '#0F6E56' : '#0F6E56',
+    secondaryTextColor: dark ? '#9FE1CB' : '#04342C',
+    tertiaryColor: dark ? '#2a1a1a' : '#faeeda',
+    tertiaryBorderColor: dark ? '#854F0B' : '#854F0B',
+    tertiaryTextColor: dark ? '#FAC775' : '#412402',
+  },
+  er: { diagramPadding: 20, layoutDirection: 'TB', minEntityWidth: 100, minEntityHeight: 75, entityPadding: 15 }
+});
+const diagram = `erDiagram
+  CUSTOM_USER {
+    int id PK
+    string username
+    string role "ADMIN, CAREGIVER, FAMILY"
+    string phone_number
+    boolean is_on_duty
+    boolean receive_sms_alerts
+  }
+  RESIDENT {
+    int id PK
+    string name
+    int age
+    string room_number
+    string risk_level "LOW, MED, HIGH"
+    json re_id_vector "AI anonymized"
+    int assigned_caregiver_id FK
+  }
+  ZONE {
+    int id PK
+    string name
+    string zone_type "CORRIDOR,SOCIAL,EXIT,BEDROOM"
+    string floor_type "TILE, CARPET"
+  }
+  DEVICE {
+    int id PK
+    string device_id
+    string device_type "CAMERA, MIC"
+    string ip_address
+    boolean is_active
+    int zone_id FK
+  }
+  MEAL_TIME {
+    int id PK
+    string name
+    time time
+    int expected_people
+    int zone_id FK
+  }
+  INCIDENT {
+    int id PK
+    string incident_type "FALL, AGGRESSION, ABSENCE"
+    string severity "CRITICAL, HIGH, LOW"
+    datetime timestamp
+    string evidence_link
+    json metadata "AI confidence, notes, etc."
+    int resident_id FK "Nullable"
+    int zone_id FK
+    int meal_id FK "Nullable - ABSENCE only"
+  }
+  OBSERVATION {
+    int id PK
+    string obs_type "GAIT, ISOLATION"
+    datetime recorded_at
+    float value "gait score OR isolation duration mins"
+    string unit "score, minutes"
+    json metadata "raw vectors, zone path, etc."
+    int resident_id FK
+    int zone_id FK
+    boolean alert_triggered "true when threshold crossed"
+  }
+  NOTIFICATION {
+    int id PK
+    string message
+    boolean is_read
+    string status "PENDING, SENT"
+    datetime created_at
+    int user_id FK
+    int incident_id FK "Nullable"
+    int observation_id FK "Nullable - threshold breach"
+  }
+  CUSTOM_USER ||--o{ RESIDENT : "assigned_caregiver"
+  CUSTOM_USER }o--o{ RESIDENT : "family_related_to"
+  CUSTOM_USER ||--o{ NOTIFICATION : "receives"
+  RESIDENT ||--o{ INCIDENT : "involved_in"
+  RESIDENT ||--o{ OBSERVATION : "tracked_by"
+  ZONE ||--o{ DEVICE : "contains"
+  ZONE ||--o{ MEAL_TIME : "hosts"
+  ZONE ||--o{ INCIDENT : "occurs_in"
+  ZONE ||--o{ OBSERVATION : "recorded_in"
+  MEAL_TIME ||--o{ INCIDENT : "absence_from"
+  INCIDENT ||--o{ NOTIFICATION : "triggers"
+  OBSERVATION ||--o{ NOTIFICATION : "triggers_when_threshold"
+`;
+const { svg } = await mermaid.render('erd-svg', diagram);
+document.getElementById('erd').innerHTML = svg;
+
+document.querySelectorAll('#erd svg.erDiagram .node').forEach(node => {
+  const firstPath = node.querySelector('path[d]');
+  if (!firstPath) return;
+  const d = firstPath.getAttribute('d');
+  const nums = d.match(/-?[\d.]+/g)?.map(Number);
+  if (!nums || nums.length < 8) return;
+  const xs = [nums[0], nums[2], nums[4], nums[6]];
+  const ys = [nums[1], nums[3], nums[5], nums[7]];
+  const x = Math.min(...xs), y = Math.min(...ys);
+  const w = Math.max(...xs) - x, h = Math.max(...ys) - y;
+  const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  rect.setAttribute('x', x); rect.setAttribute('y', y);
+  rect.setAttribute('width', w); rect.setAttribute('height', h);
+  rect.setAttribute('rx', '8');
+  for (const a of ['fill', 'stroke', 'stroke-width', 'class', 'style']) {
+    if (firstPath.hasAttribute(a)) rect.setAttribute(a, firstPath.getAttribute(a));
+  }
+  firstPath.replaceWith(rect);
+});
+document.querySelectorAll('#erd svg.erDiagram .row-rect-odd path, #erd svg.erDiagram .row-rect-even path').forEach(p => {
+  p.setAttribute('stroke', 'none');
+});
+</script>
