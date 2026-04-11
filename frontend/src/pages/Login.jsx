@@ -7,25 +7,29 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
     try {
-      // In Django, default token auth might use username. Let's send username, assuming username maps to what they typed or we mapped email to username
-      // Our seed script created family user with username 'family_smith' and email 'family@auracare.com'. But SimpleJWT expects 'username' and 'password'
-      // If we configured it strictly out of the box, it expects 'username'. We will send 'username' key since we haven't overridden SimpleJWT setting.
-      // Wait, let's just attempt passing email to the username field, or tell the user to login with their username.
-      const res = await axios.post('http://localhost:8000/api/auth/login/', {
-        username: email, // Assuming they type their username here for simplicity, or we mapped it.
+      const res = await axios.post('http://127.0.0.1:8000/api/auth/login/', {
+        username: email, // Backend EmailBackend allows finding user by email
         password: password
       });
       localStorage.setItem('access_token', res.data.access);
       localStorage.setItem('refresh_token', res.data.refresh);
       navigate('/dashboard');
     } catch (err) {
-      setError('Invalid credentials or network error.');
+      if (err.response && err.response.data && err.response.data.detail) {
+        setError(err.response.data.detail);
+      } else {
+        setError('Invalid credentials or network error.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -63,7 +67,9 @@ export default function Login() {
               <a href="#" style={{ color: 'var(--moonstone)', fontSize: '0.9rem' }}>Forgot password?</a>
             </div>
 
-            <button type="submit" className="btn btn-primary auth-btn">Sign In to Dashboard</button>
+            <button type="submit" className="btn btn-primary auth-btn" disabled={loading}>
+              {loading ? 'Signing In...' : 'Sign In to Dashboard'}
+            </button>
           </form>
 
           <div className="auth-links">

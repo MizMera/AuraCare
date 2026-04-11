@@ -3,6 +3,7 @@ from rest_framework import views, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, BasePermission
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.views import TokenObtainPairView
 from django.db.models import Avg, Count
 from django.utils import timezone
 from datetime import timedelta
@@ -11,8 +12,34 @@ from .serializers import (
     HealthMetricIngestSerializer, 
     IncidentIngestSerializer,
     ResidentDashboardSerializer,
-    IncidentSerializer
+    IncidentSerializer,
+    UserRegistrationSerializer,
+    CustomTokenObtainPairSerializer
 )
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+
+class RegisterUserView(views.APIView):
+    """
+    Endpoint for adding/registering a new user.
+    Open by default, but you might want to restrict it to IsAdminUser later.
+    """
+    permission_classes = [] 
+
+    def post(self, request, *args, **kwargs):
+        serializer = UserRegistrationSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response({
+                "message": "User registered successfully", 
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "role": user.role
+                }
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class HasAPIKey(BasePermission):
     """
@@ -55,7 +82,7 @@ class IncidentIngestView(views.APIView):
 
 class MobileDashboardView(views.APIView):
     """
-    Returns recent metrics and incidents for the logged-in family member's assigned resident.
+    Returns recent metrics and incidents for the assigned residents.
     GET Only, secured by JWT.
     """
     authentication_classes = [JWTAuthentication]
@@ -63,10 +90,13 @@ class MobileDashboardView(views.APIView):
 
     def get(self, request, *args, **kwargs):
         user = request.user
-        if user.role != CustomUser.RoleChoices.FAMILY:
-            return Response({"error": "Only family members can access this dashboard endpoint."}, status=status.HTTP_403_FORBIDDEN)
+        if user.role == CustomUser.RoleChoices.FAMILY:
+            residents = Resident.objects.filter(family_member=user)
+        elif user.role == CustomUser.RoleChoices.CAREGIVER:
+            residents = Resident.objects.filter(assigned_caregiver=user)
+        else:
+            return Response({"error": "Only family members and caregivers can access this dashboard endpoint."}, status=status.HTTP_403_FORBIDDEN)
         
-        residents = Resident.objects.filter(family_member=user)
         if not residents.exists():
             return Response({"error": "No residents assigned to your account."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -83,10 +113,13 @@ class MobileActivityLogView(views.APIView):
 
     def get(self, request, *args, **kwargs):
         user = request.user
-        if user.role != CustomUser.RoleChoices.FAMILY:
-            return Response({"error": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        if user.role == CustomUser.RoleChoices.FAMILY:
+            residents = Resident.objects.filter(family_member=user)
+        elif user.role == CustomUser.RoleChoices.CAREGIVER:
+            residents = Resident.objects.filter(assigned_caregiver=user)
+        else:
+            return Response({"error": "Forbidden: Invalid role"}, status=status.HTTP_403_FORBIDDEN)
         
-        residents = Resident.objects.filter(family_member=user)
         if not residents.exists():
             return Response({"error": "No residents assigned."}, status=status.HTTP_404_NOT_FOUND)
         
