@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+gait_model/gait_env/
+
+# Django
+backend/db.sqlite3
+backend/media/
+*.log
+
+# Node
+frontend/node_modules/
+
+# Data files
+gait_model/data/patient_database.json
+gait_model/data/patient_history.json
+
+# OS
+.DS_Store
+Thumbs.db
