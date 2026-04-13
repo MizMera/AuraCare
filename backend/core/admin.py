@@ -2,9 +2,22 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import (
     CustomUser, Resident, Zone, Device, 
-    HealthMetric, Incident, ScheduleEvent
+    HealthMetric, Incident, ScheduleEvent, MealTime, Notification
 )
+# ========== MEAL TIME ==========
+@admin.register(MealTime)
+class MealTimeAdmin(admin.ModelAdmin):
+    list_display = ('name', 'time', 'expected_people', 'zone')
+    list_filter = ('zone',)
+    search_fields = ('name',)
 
+# ========== NOTIFICATION ==========
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ('message', 'notification_type', 'user', 'is_read', 'created_at')
+    list_filter = ('notification_type', 'is_read', 'created_at')
+    search_fields = ('message', 'user__username')
+    readonly_fields = ('created_at',)
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
     list_display = ('username', 'email', 'role', 'is_staff')

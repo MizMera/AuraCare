@@ -7,6 +7,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from django.db.models import Avg, Count
 from django.utils import timezone
 from datetime import timedelta
+from django.shortcuts import get_object_or_404
 from .models import HealthMetric, Incident, Resident, CustomUser,MealTime, Notification,Zone
 from .serializers import (
     HealthMetricIngestSerializer, 
@@ -21,6 +22,7 @@ from .utils import get_current_person_count
 from django.http import StreamingHttpResponse
 from .detection import process_frame
 import cv2
+
 class PersonCountView(views.APIView):
     """
     Retourne le nombre actuel de personnes détectées.

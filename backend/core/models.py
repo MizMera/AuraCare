@@ -159,9 +159,6 @@ class ScheduleEvent(models.Model):
 #added by meriem
 
 class Notification(models.Model):
-    """
-    Gère les notifications envoyées aux utilisateurs (Caregivers, Family, Admin)
-    """
     class StatusChoices(models.TextChoices):
         PENDING = 'PENDING', _('Pending')
         SENT = 'SENT', _('Sent')
@@ -187,7 +184,7 @@ class Notification(models.Model):
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     
-    # Relations
+    # ⚠️ CE CHAMP EST ESSENTIEL - IL MANQUE PEUT-ÊTRE
     user = models.ForeignKey(
         CustomUser,
         on_delete=models.CASCADE,
@@ -195,22 +192,23 @@ class Notification(models.Model):
         blank=True,
         related_name='notifications'
     )
+    
     incident = models.ForeignKey(
-        Incident,
+        'Incident',
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name='notifications'
     )
     meal = models.ForeignKey(
-        MealTime,
+        'MealTime',
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name='notifications'
     )
     resident = models.ForeignKey(
-        Resident,
+        'Resident',
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -219,19 +217,11 @@ class Notification(models.Model):
 
     class Meta:
         ordering = ['-created_at']
-        verbose_name = "Notification"
-        verbose_name_plural = "Notifications"
 
     def __str__(self):
-        return f"{self.get_notification_type_display()}: {self.message[:50]} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
+        return f"{self.get_notification_type_display()}: {self.message[:50]}"
 
     def mark_as_read(self):
-        """Marque la notification comme lue"""
         self.is_read = True
         self.status = self.StatusChoices.READ
-        self.save()
-
-    def mark_as_sent(self):
-        """Marque la notification comme envoyée"""
-        self.status = self.StatusChoices.SENT
         self.save()
