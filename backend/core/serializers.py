@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth.password_validation import validate_password
-from .models import HealthMetric, Incident, Resident, Zone, CustomUser
+from .models import HealthMetric, Incident, Resident, Zone, CustomUser,Zone, MealTime, Notification
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
@@ -90,3 +90,21 @@ class ResidentDashboardSerializer(serializers.ModelSerializer):
     def get_incidents(self, obj):
         recent = obj.incidents.order_by('-timestamp')[:5]
         return IncidentSerializer(recent, many=True).data
+# ============================================
+# SERIALIZERS POUR MON MODULE
+# ============================================
+
+class MealTimeSerializer(serializers.ModelSerializer):
+    zone_name = serializers.CharField(source='zone.name', read_only=True)
+    
+    class Meta:
+        model = MealTime
+        fields = ['id', 'name', 'time', 'expected_people', 'zone', 'zone_name']
+
+class NotificationSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source='user.username', read_only=True)
+    incident_type = serializers.CharField(source='incident.type', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = Notification
+        fields = ['id', 'message', 'notification_type', 'status', 'is_read', 'created_at', 'user_name', 'incident_type']
