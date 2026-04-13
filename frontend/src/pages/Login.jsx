@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Activity } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios';
-
+import { authService } from '../services/api';//added
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -15,12 +15,9 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      const res = await axios.post('http://127.0.0.1:8000/api/auth/login/', {
-        username: email, // Backend EmailBackend allows finding user by email
-        password: password
-      });
-      localStorage.setItem('access_token', res.data.access);
-      localStorage.setItem('refresh_token', res.data.refresh);
+      const res = await authService.login(email, password);
+      localStorage.setItem('access_token', res.access);
+      localStorage.setItem('refresh_token', res.refresh);
       navigate('/dashboard');
     } catch (err) {
       if (err.response && err.response.data && err.response.data.detail) {
