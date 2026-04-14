@@ -11,16 +11,24 @@ const API_BASE = 'http://127.0.0.1:8000/api';
 // -----------------------------------------------------------------------------
 function StaffDashboard({ token, onLogout }) {
   const [residents, setResidents] = useState(null);
+  const [facilityIncidents, setFacilityIncidents] = useState([]);
+  const [staffSection, setStaffSection] = useState('residents');
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchStaffDashboard = async () => {
       try {
-        const response = await axios.get(`${API_BASE}/mobile/dashboard/`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setResidents(response.data);
+        const [dashboardResponse, incidentsResponse] = await Promise.all([
+          axios.get(`${API_BASE}/mobile/dashboard/`, {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          axios.get(`${API_BASE}/mobile/facility-incidents/`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+        ]);
+        setResidents(dashboardResponse.data);
+        setFacilityIncidents(incidentsResponse.data || []);
       } catch (err) {
         if (err.response?.status === 401) {
           onLogout();
@@ -50,14 +58,22 @@ function StaffDashboard({ token, onLogout }) {
         <nav style={{ flex: 1, padding: '1rem' }}>
           <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', listStyle: 'none', padding: 0 }}>
             <li>
-              <a href="#" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '10px 15px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 'var(--border-radius-sm)', color: 'var(--moonstone)', textDecoration: 'none' }}>
+              <button
+                type="button"
+                onClick={() => setStaffSection('residents')}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '10px 15px', width: '100%', backgroundColor: staffSection === 'residents' ? 'rgba(255,255,255,0.1)' : 'transparent', borderRadius: 'var(--border-radius-sm)', color: staffSection === 'residents' ? 'var(--moonstone)' : 'rgba(255,255,255,0.7)', textDecoration: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem' }}
+              >
                 <Users size={18} /> Assigned Residents
-              </a>
+              </button>
             </li>
             <li>
-              <a href="#" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '10px 15px', color: 'rgba(255,255,255,0.7)', textDecoration: 'none' }}>
+              <button
+                type="button"
+                onClick={() => setStaffSection('incidents')}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '10px 15px', width: '100%', backgroundColor: staffSection === 'incidents' ? 'rgba(255,255,255,0.1)' : 'transparent', borderRadius: 'var(--border-radius-sm)', color: staffSection === 'incidents' ? 'var(--moonstone)' : 'rgba(255,255,255,0.7)', textDecoration: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem' }}
+              >
                 <ShieldAlert size={18} /> Facility Incidents
-              </a>
+              </button>
             </li>
           </ul>
         </nav>
@@ -83,9 +99,33 @@ function StaffDashboard({ token, onLogout }) {
               <p style={{ color: 'var(--text-light)', margin: 0 }}>Monitor all assigned residents for your shift</p>
             </header>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '2rem' }}>
-              {residents && residents.map(resident => (
-                <div key={resident.id} style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: 'var(--border-radius)', boxShadow: 'var(--box-shadow)', borderTop: `4px solid ${resident.risk_level === 'HIGH' ? '#EF4444' : resident.risk_level === 'MEDIUM' ? '#F59E0B' : 'var(--moonstone)'}` }}>
+            {staffSection === 'incidents' ? (
+              <div style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: 'var(--border-radius)', boxShadow: 'var(--box-shadow)' }}>
+                <h3 style={{ color: 'var(--midnight-green)', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <ShieldAlert size={18} color="#EF4444" /> Facility Incidents
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '0.75rem' }}>
+                  {facilityIncidents.length > 0 ? facilityIncidents.map((inc) => (
+                    <div key={inc.id} style={{ padding: '0.75rem', borderRadius: '8px', backgroundColor: '#FEE2E2' }}>
+                      <p style={{ margin: 0, fontWeight: 700, color: '#7F1D1D', fontSize: '0.9rem' }}>
+                        {inc.type_display} ({inc.severity_display})
+                      </p>
+                      <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-dark)', fontSize: '0.85rem' }}>
+                        Zone: {inc.zone?.name || 'Unknown'}
+                      </p>
+                      <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-light)', fontSize: '0.8rem' }}>
+                        {new Date(inc.timestamp).toLocaleString()}
+                      </p>
+                    </div>
+                  )) : (
+                    <p style={{ color: 'var(--text-light)', margin: 0 }}>No facility incidents yet.</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '2rem' }}>
+                {residents && residents.map(resident => (
+                  <div key={resident.id} style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: 'var(--border-radius)', boxShadow: 'var(--box-shadow)', borderTop: `4px solid ${resident.risk_level === 'HIGH' ? '#EF4444' : resident.risk_level === 'MEDIUM' ? '#F59E0B' : 'var(--moonstone)'}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
                     <div>
                       <h3 style={{ margin: 0, color: 'var(--midnight-green)' }}>{resident.name}</h3>
@@ -122,9 +162,10 @@ function StaffDashboard({ token, onLogout }) {
                       )) : <li style={{ color: 'var(--text-light)' }}>No recent incidents.</li>}
                     </ul>
                   </div>
-                </div>
-              ))}
-            </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
       </main>
