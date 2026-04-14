@@ -104,23 +104,27 @@ function StaffDashboard({ token, onLogout }) {
                 <h3 style={{ color: 'var(--midnight-green)', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <ShieldAlert size={18} color="#EF4444" /> Facility Incidents
                 </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '0.75rem' }}>
-                  {facilityIncidents.length > 0 ? facilityIncidents.map((inc) => (
-                    <div key={inc.id} style={{ padding: '0.75rem', borderRadius: '8px', backgroundColor: '#FEE2E2' }}>
-                      <p style={{ margin: 0, fontWeight: 700, color: '#7F1D1D', fontSize: '0.9rem' }}>
-                        {inc.type_display} ({inc.severity_display})
-                      </p>
-                      <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-dark)', fontSize: '0.85rem' }}>
-                        Zone: {inc.zone?.name || 'Unknown'}
-                      </p>
-                      <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-light)', fontSize: '0.8rem' }}>
-                        {new Date(inc.timestamp).toLocaleString()}
-                      </p>
-                    </div>
-                  )) : (
-                    <p style={{ color: 'var(--text-light)', margin: 0 }}>No facility incidents yet.</p>
-                  )}
-                </div>
+                {facilityIncidents.length > 0 ? (
+                  <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {facilityIncidents.map((inc) => (
+                      <li key={inc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '0.85rem 1rem', borderRadius: '8px', backgroundColor: '#FEE2E2', borderLeft: '4px solid #DC2626' }}>
+                        <div>
+                          <p style={{ margin: 0, fontWeight: 700, color: '#7F1D1D', fontSize: '0.9rem' }}>
+                            {inc.type_display} ({inc.severity_display})
+                          </p>
+                          <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-dark)', fontSize: '0.85rem' }}>
+                            Zone: {inc.zone?.name || 'Unknown'}
+                          </p>
+                        </div>
+                        <p style={{ margin: 0, color: 'var(--text-light)', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                          {new Date(inc.timestamp).toLocaleString()}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p style={{ color: 'var(--text-light)', margin: 0 }}>No facility incidents yet.</p>
+                )}
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '2rem' }}>
