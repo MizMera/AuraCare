@@ -12,7 +12,7 @@ export default function Home() {
         <section className="hero">
           <div className="container">
             <div className="hero-content">
-              <h1>Privacy-First AI Elderly Monitoring</h1>
+              <h1>AuraCare: Privacy-First AI Elderly Monitoring</h1>
               <p>
                 AuraCare provides 24/7 intelligent observation without invading personal privacy. 
                 Our AI modules analyze movements and behavior to instantly alert you when emergencies occur.

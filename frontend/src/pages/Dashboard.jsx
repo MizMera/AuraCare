@@ -2,9 +2,57 @@ import { useState, useEffect } from 'react';
 import { Navigate, useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { LogOut, Activity, AlertCircle, ShieldAlert, Users, HeartPulse } from 'lucide-react';
+import { LogOut, Activity, AlertCircle, ShieldAlert, Users, HeartPulse, BellRing } from 'lucide-react';
 
 const API_BASE = 'http://127.0.0.1:8000/api';
+const floatingLogoutButtonStyle = {
+  position: 'fixed',
+  left: '24px',
+  bottom: '24px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.5rem',
+  padding: '12px 16px',
+  backgroundColor: 'var(--midnight-green)',
+  color: 'white',
+  border: 'none',
+  borderRadius: '999px',
+  boxShadow: 'var(--box-shadow)',
+  cursor: 'pointer',
+  fontSize: '0.95rem',
+  zIndex: 30,
+};
+const floatingSidebarStyle = {
+  width: '260px',
+  backgroundColor: 'var(--midnight-green)',
+  color: 'white',
+  display: 'flex',
+  flexDirection: 'column',
+  margin: '0',
+  borderRadius: '0',
+  boxShadow: 'var(--box-shadow)',
+  overflow: 'hidden',
+  height: '100vh',
+  position: 'fixed',
+  top: '0',
+  left: '0',
+};
+const dashboardMainStyle = {
+  flex: 1,
+  padding: '3rem',
+  marginLeft: '260px',
+};
+
+function isToday(timestamp) {
+  if (!timestamp) return false;
+  const date = new Date(timestamp);
+  const now = new Date();
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+}
 
 // -----------------------------------------------------------------------------
 // CAREGIVER / STAFF DASHBOARD
@@ -15,6 +63,7 @@ function StaffDashboard({ token, onLogout }) {
   const [staffSection, setStaffSection] = useState('residents');
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
     const fetchStaffDashboard = async () => {
@@ -47,11 +96,14 @@ function StaffDashboard({ token, onLogout }) {
   }, [token, onLogout]);
 
   if (loading) return <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--midnight-green)' }}><h2>Loading Staff Dashboard...</h2></div>;
+  const criticalIncidents = facilityIncidents.filter(
+    (incident) => incident.severity === 'CRITICAL' && isToday(incident.timestamp)
+  );
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--alice-blue)' }}>
       {/* Sidebar */}
-      <aside style={{ width: '260px', backgroundColor: 'var(--midnight-green)', color: 'white', display: 'flex', flexDirection: 'column' }}>
+      <aside style={floatingSidebarStyle}>
         <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
           <Link to="/"><img src="/LOGO_AURACARE.png" alt="AuraCare Logo" style={{ height: '40px' }} /></Link>
         </div>
@@ -77,15 +129,10 @@ function StaffDashboard({ token, onLogout }) {
             </li>
           </ul>
         </nav>
-        <div style={{ padding: '2rem' }}>
-          <button onClick={onLogout} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'rgba(255,255,255,0.7)', width: '100%', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem' }}>
-            <LogOut size={18} /> Sign Out
-          </button>
-        </div>
       </aside>
 
       {/* Main Content */}
-      <main style={{ flex: 1, padding: '3rem' }}>
+      <main style={dashboardMainStyle}>
         {errorMsg ? (
           <div style={{ backgroundColor: 'white', padding: '3rem', borderRadius: 'var(--border-radius)', boxShadow: 'var(--box-shadow)', textAlign: 'center' }}>
             <AlertCircle size={48} color="var(--cadet-gray)" style={{ marginBottom: '1rem' }} />
@@ -94,9 +141,43 @@ function StaffDashboard({ token, onLogout }) {
           </div>
         ) : (
           <>
-            <header style={{ marginBottom: '3rem' }}>
-              <h1 style={{ color: 'var(--midnight-green)', margin: 0 }}>Caregiver Dashboard</h1>
-              <p style={{ color: 'var(--text-light)', margin: 0 }}>Monitor all assigned residents for your shift</p>
+            <header style={{ marginBottom: '3rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', position: 'relative' }}>
+              <div>
+                <h1 style={{ color: 'var(--midnight-green)', margin: 0 }}>Caregiver Dashboard</h1>
+                <p style={{ color: 'var(--text-light)', margin: 0 }}>Monitor all assigned residents for your shift</p>
+              </div>
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowNotifications((prev) => !prev)}
+                  style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '46px', height: '46px', borderRadius: '999px', border: 'none', backgroundColor: 'white', boxShadow: 'var(--box-shadow)', cursor: 'pointer' }}
+                >
+                  <BellRing size={20} color="var(--midnight-green)" />
+                  {criticalIncidents.length > 0 ? (
+                    <span style={{ position: 'absolute', top: '8px', right: '8px', minWidth: '18px', height: '18px', padding: '0 4px', borderRadius: '999px', backgroundColor: '#DC2626', color: 'white', fontSize: '0.7rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {criticalIncidents.length}
+                    </span>
+                  ) : null}
+                </button>
+                {showNotifications ? (
+                    <div style={{ position: 'absolute', top: '54px', right: 0, width: '360px', maxWidth: '80vw', backgroundColor: 'white', borderRadius: '12px', boxShadow: 'var(--box-shadow)', padding: '1rem', zIndex: 20 }}>
+                    <h3 style={{ margin: '0 0 0.75rem 0', color: 'var(--midnight-green)', fontSize: '1rem' }}>Critical Incidents</h3>
+                    {criticalIncidents.length > 0 ? (
+                        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '320px', overflowY: 'auto' }}>
+                        {criticalIncidents.slice(0, 8).map((incident) => (
+                          <li key={incident.id} style={{ padding: '0.75rem', borderRadius: '8px', backgroundColor: '#FEE2E2', borderLeft: '4px solid #DC2626' }}>
+                            <p style={{ margin: 0, fontWeight: 700, color: '#7F1D1D', fontSize: '0.9rem' }}>{incident.type_display}</p>
+                            <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-dark)', fontSize: '0.85rem' }}>Zone: {incident.zone?.name || 'Unknown'}</p>
+                            <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-light)', fontSize: '0.8rem' }}>{new Date(incident.timestamp).toLocaleString()}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p style={{ margin: 0, color: 'var(--text-light)' }}>No critical incidents happened today.</p>
+                    )}
+                  </div>
+                ) : null}
+              </div>
             </header>
 
             {staffSection === 'incidents' ? (
@@ -173,6 +254,9 @@ function StaffDashboard({ token, onLogout }) {
           </>
         )}
       </main>
+      <button type="button" onClick={onLogout} style={floatingLogoutButtonStyle}>
+        <LogOut size={18} /> Sign Out
+      </button>
     </div>
   );
 }
@@ -184,6 +268,7 @@ function FamilyDashboard({ token, onLogout }) {
   const [data, setData] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -210,6 +295,9 @@ function FamilyDashboard({ token, onLogout }) {
   }, [token, onLogout]);
 
   if (loading) return <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--midnight-green)' }}><h2>Loading AI Telemetry...</h2></div>;
+  const criticalIncidents = (data?.recent_incidents || []).filter(
+    (incident) => incident.severity === 'CRITICAL' && isToday(incident.timestamp)
+  );
 
   const tempChartData = data ? [
     { name: 'Mon', gait: 0.8, social: data.average_social_score_7d - 5 || 50 },
@@ -224,7 +312,7 @@ function FamilyDashboard({ token, onLogout }) {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--alice-blue)' }}>
       {/* Sidebar */}
-      <aside style={{ width: '260px', backgroundColor: 'var(--midnight-green)', color: 'white', display: 'flex', flexDirection: 'column' }}>
+      <aside style={floatingSidebarStyle}>
         <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
           <Link to="/">
             <img src="/LOGO_AURACARE.png" alt="AuraCare Logo" style={{ height: '40px' }} />
@@ -244,15 +332,10 @@ function FamilyDashboard({ token, onLogout }) {
             </li>
           </ul>
         </nav>
-        <div style={{ padding: '2rem' }}>
-          <button onClick={onLogout} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'rgba(255,255,255,0.7)', width: '100%', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem' }}>
-            <LogOut size={18} /> Sign Out
-          </button>
-        </div>
       </aside>
 
       {/* Main Content */}
-      <main style={{ flex: 1, padding: '3rem' }}>
+      <main style={dashboardMainStyle}>
         {errorMsg ? (
            <div style={{ backgroundColor: 'white', padding: '3rem', borderRadius: 'var(--border-radius)', boxShadow: 'var(--box-shadow)', textAlign: 'center' }}>
              <AlertCircle size={48} color="var(--cadet-gray)" style={{ marginBottom: '1rem' }} />
@@ -262,14 +345,48 @@ function FamilyDashboard({ token, onLogout }) {
            </div>
         ) : (
           <>
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem' }}>
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem', position: 'relative' }}>
               <div>
                 <h1 style={{ color: 'var(--midnight-green)', margin: 0 }}>Resident Overview</h1>
                 <p style={{ color: 'var(--text-light)', margin: 0 }}>Monitoring: {data?.resident_name}</p>
               </div>
-              <div style={{ padding: '10px 20px', backgroundColor: 'white', borderRadius: 'var(--border-radius-sm)', boxShadow: 'var(--box-shadow)' }}>
-                <span style={{ color: 'var(--text-light)', fontSize: '0.9rem' }}>Status: </span>
-                <span style={{ color: 'var(--moonstone)', fontWeight: 'bold' }}>Active & Secure</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ position: 'relative' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowNotifications((prev) => !prev)}
+                    style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '46px', height: '46px', borderRadius: '999px', border: 'none', backgroundColor: 'white', boxShadow: 'var(--box-shadow)', cursor: 'pointer' }}
+                  >
+                    <BellRing size={20} color="var(--midnight-green)" />
+                    {criticalIncidents.length > 0 ? (
+                      <span style={{ position: 'absolute', top: '8px', right: '8px', minWidth: '18px', height: '18px', padding: '0 4px', borderRadius: '999px', backgroundColor: '#DC2626', color: 'white', fontSize: '0.7rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {criticalIncidents.length}
+                      </span>
+                    ) : null}
+                  </button>
+                  {showNotifications ? (
+                    <div style={{ position: 'absolute', top: '54px', right: 0, width: '360px', maxWidth: '80vw', backgroundColor: 'white', borderRadius: '12px', boxShadow: 'var(--box-shadow)', padding: '1rem', zIndex: 20 }}>
+                      <h3 style={{ margin: '0 0 0.75rem 0', color: 'var(--midnight-green)', fontSize: '1rem' }}>Critical Incidents</h3>
+                      {criticalIncidents.length > 0 ? (
+                        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '320px', overflowY: 'auto' }}>
+                          {criticalIncidents.slice(0, 8).map((incident, idx) => (
+                            <li key={incident.id || idx} style={{ padding: '0.75rem', borderRadius: '8px', backgroundColor: '#FEE2E2', borderLeft: '4px solid #DC2626' }}>
+                              <p style={{ margin: 0, fontWeight: 700, color: '#7F1D1D', fontSize: '0.9rem' }}>{incident.type_display}</p>
+                              <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-dark)', fontSize: '0.85rem' }}>Zone: {incident.zone?.name || 'Unknown'}</p>
+                              <p style={{ margin: '0.2rem 0 0 0', color: 'var(--text-light)', fontSize: '0.8rem' }}>{new Date(incident.timestamp).toLocaleString()}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p style={{ margin: 0, color: 'var(--text-light)' }}>No critical incidents happened today.</p>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+                <div style={{ padding: '10px 20px', backgroundColor: 'white', borderRadius: 'var(--border-radius-sm)', boxShadow: 'var(--box-shadow)' }}>
+                  <span style={{ color: 'var(--text-light)', fontSize: '0.9rem' }}>Status: </span>
+                  <span style={{ color: 'var(--moonstone)', fontWeight: 'bold' }}>Active & Secure</span>
+                </div>
               </div>
             </header>
 
@@ -340,6 +457,9 @@ function FamilyDashboard({ token, onLogout }) {
           </>
         )}
       </main>
+      <button type="button" onClick={onLogout} style={floatingLogoutButtonStyle}>
+        <LogOut size={18} /> Sign Out
+      </button>
     </div>
   );
 }
