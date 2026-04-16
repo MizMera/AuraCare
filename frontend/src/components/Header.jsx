@@ -15,7 +15,7 @@ export default function Header() {
           <a href="#process">How It Works</a>
         </nav>
         <div className="header-actions" style={{ display: 'flex', gap: '0.85rem', alignItems: 'center' }}>
-          <Link to="/family-portal" className="btn header-top-btn header-top-btn-secondary">Family Portal</Link>
+          <Link to="/login" className="btn header-top-btn header-top-btn-secondary">Family Portal</Link>
           <Link to="/login" className="btn header-top-btn header-top-btn-primary">Dashboard Login</Link>
         </div>
       </div>
