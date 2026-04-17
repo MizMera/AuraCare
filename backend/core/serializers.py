@@ -1,7 +1,9 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth.password_validation import validate_password
-from .models import HealthMetric, Incident, Resident, Zone, CustomUser
+from .fall_incident import record_fall_incident
+from .aggression_incident import record_aggression_incident
+from .models import Device, HealthMetric, Incident, Resident, Zone, CustomUser
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
@@ -52,6 +54,46 @@ class IncidentIngestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Incident
         fields = ['resident', 'zone', 'type', 'severity', 'description']
+
+
+class FallIncidentIngestSerializer(serializers.Serializer):
+    """
+    Fall events are keyed by camera device_id. Zone is taken from Device.zone;
+    Incident never stores a device FK.
+    """
+    device_id = serializers.CharField(max_length=100)
+    description = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate_device_id(self, value):
+        if not Device.objects.filter(device_id=value).exists():
+            raise serializers.ValidationError('Unknown device_id.')
+        return value
+
+    def create(self, validated_data):
+        return record_fall_incident(
+            validated_data['device_id'],
+            validated_data.get('description', ''),
+        )
+
+class AggressionIncidentIngestSerializer(serializers.Serializer):
+    """
+    Aggression events are keyed by camera device_id. Zone is taken from Device.zone;
+    Incident never stores a device FK.
+    """
+    device_id = serializers.CharField(max_length=100)
+    description = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate_device_id(self, value):
+        if not Device.objects.filter(device_id=value).exists():
+            raise serializers.ValidationError('Unknown device_id.')
+        return value
+
+    def create(self, validated_data):
+        return record_aggression_incident(
+            validated_data['device_id'],
+            validated_data.get('description', ''),
+        )
+
 
 class ZoneSerializer(serializers.ModelSerializer):
     class Meta:

@@ -121,4 +121,22 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
+from corsheaders.defaults import default_headers
+
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'x-api-key',
+]
+
+# Fall detection (YOLO pose + LSTM). Weights: backend/models/fall_detection_model.pth
+FALL_DETECTION = {
+    'LSTM_WEIGHTS': BASE_DIR / 'models' / 'fall_detection_model.pth',
+    'YOLO_POSE': 'yolo11n-pose.pt',
+    'FRAME_WIDTH': 640,
+    'FRAME_HEIGHT': 480,
+    'SEQUENCE_LENGTH': 25,
+    'LSTM_HIDDEN_SIZE': 256,
+    'LSTM_NUM_LAYERS': 2,
+    'NUM_CLASSES': 2,
+    'FALL_CLASS_INDEX': 1,
+}
