@@ -12,8 +12,10 @@ import {
   Users, TrendingUp, Video,
 } from 'lucide-react';
 
-const API_BASE = 'http://127.0.0.1:8000/api';
+const API_HOST = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
+const API_BASE = `http://${API_HOST}:8000/api`;
 const DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+const LOCAL_SESSION_KEY = 'auracare.social-isolation.sessions';
 
 // ── helpers ──────────────────────────────────────────────────
 const scoreColor = (s) => s >= 65 ? '#EF4444' : s >= 40 ? '#F59E0B' : '#44A6B5';
@@ -61,9 +63,85 @@ const TabBtn = ({ label, active, onClick, icon }) => (
   }}>{icon}{label}</button>
 );
 
+const readLocalSessions = () => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(LOCAL_SESSION_KEY);
+    const parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeLocalSessions = (sessions) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(sessions.slice(0, 60)));
+};
+
+const buildLocalKpi = (sessions) => {
+  const alertsToday = sessions.reduce((count, session) => {
+    const sessionDate = new Date(session.uploaded_at).toDateString();
+    const today = new Date().toDateString();
+    if (sessionDate !== today) return count;
+    return count + ((session.frames_isole || 0) > 0 || (session.frames_vigilance || 0) > 0 ? 1 : 0);
+  }, 0);
+
+  const weeklyTrend = sessions[0]?.weekly_scores?.length === 7
+    ? sessions[0].weekly_scores
+    : Array(7).fill(0);
+
+  return {
+    alerts_today: alertsToday,
+    total_analysed: sessions.length,
+    total_sessions: sessions.length,
+    weekly_trend: weeklyTrend,
+  };
+};
+
+const makeLocalSession = ({ filename, counters, durationSeconds, events, source = 'webcam', savedWithoutVideo = false }) => {
+  const total = counters.actif + counters.vig + counters.iso || 1;
+  const isolationScore = +(counters.iso / total * 100).toFixed(1);
+  const weeklyScores = Array(7).fill(0);
+  const dayIndex = (new Date().getDay() + 6) % 7;
+  weeklyScores[dayIndex] = Math.round(isolationScore);
+
+  return {
+    id: `local-${Date.now()}`,
+    filename,
+    source,
+    uploaded_at: new Date().toISOString(),
+    duration_seconds: durationSeconds,
+    persons_detected: Math.max(1, new Set(events.map((event) => event.track_id)).size || 1),
+    frames_actif: counters.actif,
+    frames_vigilance: counters.vig,
+    frames_isole: counters.iso,
+    isolation_score: isolationScore,
+    actif_pct: Math.round(counters.actif / total * 100),
+    vigilance_pct: Math.round(counters.vig / total * 100),
+    isolation_pct: Math.round(counters.iso / total * 100),
+    status: 'analysed',
+    weekly_scores: weeklyScores,
+    saved_locally: true,
+    saved_without_video: savedWithoutVideo,
+  };
+};
+
+const upsertLocalSession = (session) => {
+  const nextSessions = [session, ...readLocalSessions().filter((item) => item.id !== session.id)];
+  writeLocalSessions(nextSessions);
+  return nextSessions;
+};
+
 // ── main component ────────────────────────────────────────────
-export default function SocialInteraction({ token, onLogout }) {
+export default function SocialInteraction({
+  token,
+  onLogout,
+  title = 'Social Interaction',
+  description = '',
+}) {
   const navigate = useNavigate();
+  void navigate;
   const [tab, setTab]             = useState('dashboard');
   const [sessions, setSessions]   = useState([]);
   const [kpi, setKpi]             = useState({ alerts_today:0, total_analysed:0, total_sessions:0, weekly_trend:[] });
@@ -93,6 +171,12 @@ export default function SocialInteraction({ token, onLogout }) {
 
   const authHeader = { Authorization: `Bearer ${token}` };
 
+  const hydrateLocalSessions = useCallback(() => {
+    const localSessions = readLocalSessions();
+    setSessions(localSessions);
+    setKpi(buildLocalKpi(localSessions));
+  }, []);
+
   const fetchSessions = useCallback(async () => {
     try {
       const r = await axios.get(`${API_BASE}/isolation/sessions/`, { headers: authHeader });
@@ -100,10 +184,11 @@ export default function SocialInteraction({ token, onLogout }) {
       setKpi(r.data.kpi || {});
     } catch (e) {
       if (e.response?.status === 401) onLogout();
+      else hydrateLocalSessions();
     } finally {
       setLoading(false);
     }
-  }, [token]); // eslint-disable-line
+  }, [token, hydrateLocalSessions]); // eslint-disable-line
 
   useEffect(() => { fetchSessions(); }, [fetchSessions]);
 
@@ -152,58 +237,129 @@ export default function SocialInteraction({ token, onLogout }) {
     }
   };
 
-  const stopWebcam = () => {
+  const stopWebcam = async () => {
     clearInterval(rtIntervalRef.current);
     clearInterval(durIntervalRef.current);
     setRtSaving(true);
+    setRtActive(false);
 
-    const doSave = async (blob) => {
-      const now = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
-      const fname = `webcam_${now}.webm`;
-      try {
-        let r;
-        if (blob) {
+    const countersSnapshot = { ...rtCounters };
+    const durationSnapshot = rtDur;
+    const eventsSnapshot = rtEventsRef.current.slice(0, 25);
+    const now = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+    const fname = `webcam_${now}.webm`;
+
+    const stopPreview = () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+      if (videoRef.current) videoRef.current.srcObject = null;
+    };
+
+    const buildBlob = () => (
+      chunksRef.current.length ? new Blob(chunksRef.current, { type:'video/webm' }) : null
+    );
+
+    const waitForRecorderBlob = () => new Promise((resolve) => {
+      const recorder = recorderRef.current;
+      if (!recorder || recorder.state === 'inactive') {
+        resolve(buildBlob());
+        return;
+      }
+
+      let settled = false;
+      const finalize = () => {
+        if (settled) return;
+        settled = true;
+        resolve(buildBlob());
+      };
+
+      const previousOnStop = recorder.onstop;
+      const previousOnError = recorder.onerror;
+
+      recorder.onstop = (...args) => {
+        if (typeof previousOnStop === 'function') previousOnStop(...args);
+        finalize();
+      };
+      recorder.onerror = (...args) => {
+        if (typeof previousOnError === 'function') previousOnError(...args);
+        finalize();
+      };
+
+      try { recorder.requestData?.(); } catch (error) { void error; }
+      try { recorder.stop(); } catch { finalize(); }
+      setTimeout(finalize, 1500);
+    });
+
+    const saveSessionRemotely = async (blob) => {
+      let uploadFailed = false;
+
+      if (blob) {
+        try {
           const form = new FormData();
           form.append('video_file', blob, fname);
           form.append('filename', fname);
-          form.append('frames_actif', rtCounters.actif);
-          form.append('frames_vigilance', rtCounters.vig);
-          form.append('frames_isole', rtCounters.iso);
-          form.append('duration_seconds', rtDur);
-          r = await axios.post(`${API_BASE}/isolation/upload/`, form, {
-            headers: { ...authHeader, 'Content-Type':'multipart/form-data' }
+          form.append('frames_actif', countersSnapshot.actif);
+          form.append('frames_vigilance', countersSnapshot.vig);
+          form.append('frames_isole', countersSnapshot.iso);
+          form.append('duration_seconds', durationSnapshot);
+          const response = await axios.post(`${API_BASE}/isolation/upload/`, form, {
+            headers: { ...authHeader, 'Content-Type':'multipart/form-data' },
+            timeout: 20000,
           });
-        } else {
-          r = await axios.post(`${API_BASE}/isolation/sessions/`, {
-            filename: fname,
-            frames_actif: rtCounters.actif,
-            frames_vigilance: rtCounters.vig,
-            frames_isole: rtCounters.iso,
-            duration_seconds: rtDur,
-            events: rtEventsRef.current.slice(0, 25),
-          }, { headers: authHeader });
+          return { ...response.data, saved_locally: false, saved_without_video: false };
+        } catch (error) {
+          if (error.response?.status === 401) throw error;
+          uploadFailed = true;
         }
-        setRtSaved(r.data);
-        fetchSessions();
-      } catch (e) {
-        alert('Erreur sauvegarde : ' + (e.response?.data?.detail || e.message));
-      } finally {
-        setRtSaving(false);
-        setRtActive(false);
       }
+
+      const response = await axios.post(`${API_BASE}/isolation/sessions/`, {
+        filename: fname,
+        frames_actif: countersSnapshot.actif,
+        frames_vigilance: countersSnapshot.vig,
+        frames_isole: countersSnapshot.iso,
+        duration_seconds: durationSnapshot,
+        events: eventsSnapshot,
+      }, {
+        headers: authHeader,
+        timeout: 15000,
+      });
+
+      return { ...response.data, saved_locally: false, saved_without_video: uploadFailed || !blob };
     };
 
-    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
-    if (videoRef.current) videoRef.current.srcObject = null;
+    try {
+      const blob = await waitForRecorderBlob();
+      stopPreview();
 
-    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
-      recorderRef.current.onstop = () => {
-        const blob = chunksRef.current.length ? new Blob(chunksRef.current, { type:'video/webm' }) : null;
-        doSave(blob);
-      };
-      recorderRef.current.stop();
-    } else {
-      doSave(null);
+      try {
+        const saved = await saveSessionRemotely(blob);
+        setRtSaved(saved);
+        await fetchSessions();
+      } catch (error) {
+        if (error.response?.status === 401) {
+          onLogout();
+          return;
+        }
+
+        const localSession = makeLocalSession({
+          filename: fname,
+          counters: countersSnapshot,
+          durationSeconds: durationSnapshot,
+          events: eventsSnapshot,
+          savedWithoutVideo: true,
+        });
+        const nextSessions = upsertLocalSession(localSession);
+        setSessions(nextSessions);
+        setKpi(buildLocalKpi(nextSessions));
+        setRtSaved(localSession);
+      }
+    } finally {
+      recorderRef.current = null;
+      chunksRef.current = [];
+      setRtSaving(false);
     }
   };
 
@@ -221,6 +377,7 @@ export default function SocialInteraction({ token, onLogout }) {
       { at:82, msg:'Computing score…' },
       { at:93, msg:'Finalising…' },
     ];
+    void stages;
     let pct = 0;
     const anim = setInterval(() => {
       pct = Math.min(pct + (pct < 60 ? 2.5 : pct < 85 ? 1.2 : 0.4), 95);
@@ -261,14 +418,25 @@ export default function SocialInteraction({ token, onLogout }) {
   const rtPct   = Math.round(rtCounters.iso / rtTotal * 100);
 
   // ── Render ────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div style={{ flex:1, padding:'2.5rem', background:'var(--alice-blue)', minHeight:'100vh' }}>
+        <Card>
+          <p style={{ margin:0, color:'var(--midnight-green)', fontWeight:700 }}>Loading social interaction analytics...</p>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div style={{ flex:1, padding:'2.5rem', background:'var(--alice-blue)', overflowY:'auto', minHeight:'100vh' }}>
 
       {/* Page header */}
       <div style={{ marginBottom:'2rem' }}>
-        <h1 style={{ color:'var(--midnight-green)', margin:0, fontSize:'1.8rem' }}>Social Interaction</h1>
-        <p style={{ color:'var(--text-light)', margin:'4px 0 0' }}>
-        </p>
+        <h1 style={{ color:'var(--midnight-green)', margin:0, fontSize:'1.8rem' }}>{title}</h1>
+        {description ? (
+          <p style={{ color:'var(--text-light)', margin:'4px 0 0' }}>{description}</p>
+        ) : null}
       </div>
 
       {/* Tabs */}

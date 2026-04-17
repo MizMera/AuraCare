@@ -89,6 +89,28 @@ class HealthMetric(models.Model):
     def __str__(self):
         return f"{self.resident.name} - {self.get_metric_type_display()}: {self.value}"
 
+
+class MealTime(models.Model):
+    name = models.CharField(max_length=50, help_text="e.g., Breakfast, Lunch, Dinner")
+    time = models.TimeField(help_text="Scheduled meal time")
+    expected_people = models.PositiveIntegerField(default=4, help_text="Expected number of residents")
+    zone = models.ForeignKey(
+        Zone,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='meals',
+        help_text="Zone where the meal takes place (e.g., Dining Hall)",
+    )
+
+    class Meta:
+        ordering = ['time']
+        verbose_name = "Meal Time"
+        verbose_name_plural = "Meal Times"
+
+    def __str__(self):
+        return f"{self.name} at {self.time.strftime('%H:%M')}"
+
 class Incident(models.Model):
     class IncidentTypeChoices(models.TextChoices):
         FALL = 'FALL', _('Fall')
@@ -115,6 +137,14 @@ class Incident(models.Model):
     severity = models.CharField(max_length=20, choices=SeverityChoices.choices)
     description = models.TextField(blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
+    meal = models.ForeignKey(
+        MealTime,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='absence_incidents',
+        help_text="Only used for absence incidents tied to a meal schedule.",
+    )
 
     def __str__(self):
         return f"{self.get_severity_display()} {self.get_type_display()} in {self.zone.name}"
@@ -128,6 +158,72 @@ class ScheduleEvent(models.Model):
 
     def __str__(self):
         return f"{self.name} at {self.expected_zone.name}"
+
+
+class Notification(models.Model):
+    class StatusChoices(models.TextChoices):
+        PENDING = 'PENDING', _('Pending')
+        SENT = 'SENT', _('Sent')
+        READ = 'READ', _('Read')
+
+    class NotificationTypeChoices(models.TextChoices):
+        INCIDENT = 'INCIDENT', _('Incident Alert')
+        ABSENCE = 'ABSENCE', _('Meal Absence Alert')
+        HEALTH = 'HEALTH', _('Health Metric Alert')
+        INFO = 'INFO', _('Information')
+
+    message = models.TextField()
+    notification_type = models.CharField(
+        max_length=20,
+        choices=NotificationTypeChoices.choices,
+        default=NotificationTypeChoices.INFO,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=StatusChoices.choices,
+        default=StatusChoices.PENDING,
+    )
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='notifications',
+    )
+    incident = models.ForeignKey(
+        Incident,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='notifications',
+    )
+    meal = models.ForeignKey(
+        MealTime,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='notifications',
+    )
+    resident = models.ForeignKey(
+        Resident,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='notifications',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.get_notification_type_display()}: {self.message[:50]}"
+
+    def mark_as_read(self):
+        self.is_read = True
+        self.status = self.StatusChoices.READ
+        self.save(update_fields=['is_read', 'status'])
 
 
 # ─────────────────────────────────────────────────────────────

@@ -217,6 +217,8 @@ def draw_skeleton(frame, keypoints, color, person_label=None):
 
 def draw_hud(frame, alert_level, confidence, fps, num_persons, per_person_conf, threshold):
     h, w = frame.shape[:2]
+    overlay = frame.copy()
+    
     if alert_level == "FIGHT":
         color, label = COLOR_CRITICAL, "⚠ AGGRESSION DETECTED"
     elif alert_level == "CAUTION":
@@ -224,39 +226,65 @@ def draw_hud(frame, alert_level, confidence, fps, num_persons, per_person_conf, 
     else:
         color, label = COLOR_SAFE, "SAFE"
 
-    # Top bar
-    cv2.rectangle(frame, (0, 0), (w, 50), COLOR_BG, -1)
-    cv2.putText(frame, "AuraCare LIVE", (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
-    badge_w = 350
-    cv2.rectangle(frame, (w - badge_w - 10, 5), (w - 10, 45), color, -1)
-    cv2.putText(frame, label, (w - badge_w + 5, 37), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+    # Top bar background with transparency
+    cv2.rectangle(overlay, (0, 0), (w, 60), (15, 20, 25), -1)
+    
+    # AuraCare LIVE logo area
+    cv2.putText(overlay, "AuraCare", (15, 40), cv2.FONT_HERSHEY_DUPLEX, 1.1, (255, 255, 255), 2, cv2.LINE_AA)
+    cv2.putText(overlay, "LIVE", (180, 40), cv2.FONT_HERSHEY_DUPLEX, 1.1, (50, 205, 50), 2, cv2.LINE_AA)
 
-    # Bottom bar
-    cv2.rectangle(frame, (0, h - 40), (w, h), COLOR_BG, -1)
-    info = f"Confidence: {confidence:.0%}  |  FPS: {fps:.0f}  |  Persons: {num_persons}"
-    cv2.putText(frame, info, (10, h - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
+    # Status label background
+    badge_w = 360
+    cv2.rectangle(overlay, (w - badge_w - 15, 10), (w - 15, 50), color, -1)
+    cv2.putText(overlay, label, (w - badge_w + 10, 38), cv2.FONT_HERSHEY_DUPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA)
 
-    # Confidence bar
-    bar_x, bar_y, bar_w, bar_h = 10, 60, 200, 20
-    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (80, 80, 80), -1)
+    # Bottom bar background
+    cv2.rectangle(overlay, (0, h - 45), (w, h), (15, 20, 25), -1)
+    
+    # Blend overlay with frame
+    cv2.addWeighted(overlay, 0.85, frame, 0.15, 0, frame)
+    
+    # Bottom details (drawn directly on frame for sharpness)
+    info = f"Confidence: {confidence:.0%}    |    FPS: {fps:.0f}    |    Persons Tracked: {num_persons}"
+    cv2.putText(frame, info, (15, h - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (220, 220, 220), 1, cv2.LINE_AA)
+
+    # Confidence bar area
+    bar_x, bar_y, bar_w, bar_h = 15, 75, 220, 18
+    # Background for bar
+    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (40, 40, 40), -1)
+    
+    # Fill gradient-like effect based on confidence
     fill = int(bar_w * min(confidence, 1.0))
-    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + fill, bar_y + bar_h), color, -1)
-    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (200, 200, 200), 1)
+    if fill > 0:
+        cv2.rectangle(frame, (bar_x, bar_y), (bar_x + fill, bar_y + bar_h), color, -1)
+        
+    # Bar border
+    cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), (150, 150, 150), 1)
+    
+    # Threshold indicator
     thresh_x = bar_x + int(bar_w * threshold)
-    cv2.line(frame, (thresh_x, bar_y - 3), (thresh_x, bar_y + bar_h + 3), (255, 255, 255), 2)
+    cv2.line(frame, (thresh_x, bar_y - 4), (thresh_x, bar_y + bar_h + 4), (255, 255, 255), 2)
+    cv2.putText(frame, "THRESH", (thresh_x - 20, bar_y - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1, cv2.LINE_AA)
 
     # Per-person mini bars
     for pid, pconf in enumerate(per_person_conf):
-        mini_y = bar_y + bar_h + 8 + pid * 18
+        mini_y = bar_y + bar_h + 12 + pid * 22
         p_color = PERSON_COLORS[pid % len(PERSON_COLORS)]
-        cv2.putText(frame, f"P{pid+1}", (bar_x, mini_y + 12), cv2.FONT_HERSHEY_SIMPLEX, 0.4, p_color, 1)
-        mini_bx, mini_bw = bar_x + 25, bar_w - 25
-        cv2.rectangle(frame, (mini_bx, mini_y), (mini_bx + mini_bw, mini_y + 12), (60, 60, 60), -1)
+        
+        # Draw subject text
+        cv2.putText(frame, f"SUBJ {pid+1}", (bar_x, mini_y + 14), cv2.FONT_HERSHEY_SIMPLEX, 0.4, p_color, 1, cv2.LINE_AA)
+        
+        mini_bx, mini_bw = bar_x + 65, bar_w - 65
+        # Individual background
+        cv2.rectangle(frame, (mini_bx, mini_y), (mini_bx + mini_bw, mini_y + 14), (50, 50, 50), -1)
+        
         mini_fill = int(mini_bw * min(pconf, 1.0))
         bar_color = COLOR_CRITICAL if pconf >= threshold else p_color
-        cv2.rectangle(frame, (mini_bx, mini_y), (mini_bx + mini_fill, mini_y + 12), bar_color, -1)
-        cv2.putText(frame, f"{pconf:.0%}", (mini_bx + mini_bw + 5, mini_y + 11),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.35, (180, 180, 180), 1)
+        if mini_fill > 0:
+            cv2.rectangle(frame, (mini_bx, mini_y), (mini_bx + mini_fill, mini_y + 14), bar_color, -1)
+            
+        cv2.putText(frame, f"{pconf:.0%}", (mini_bx + mini_bw + 8, mini_y + 12),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1, cv2.LINE_AA)
 
 
 # ══════════════════════════════════════════════

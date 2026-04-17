@@ -16,6 +16,7 @@ import torch.nn as nn
 import torch.nn.functional as torchF
 import pickle
 import requests
+from .camera_arbiter import camera_arbiter
 
 # ══════════════════════════════════════════════
 # CONFIG
@@ -184,42 +185,73 @@ def _draw_skel(f, kps, color, label=None):
 
 def _draw_hud(f, alert, conf, fps, n_pers, pp_conf, thresh):
     h, w = f.shape[:2]
+    overlay = f.copy()
+    
     if alert == "FIGHT":
         color, label = _CRIT, "AGGRESSION DETECTED"
     elif alert == "CAUTION":
         color, label = _WARN, "CAUTION"
     else:
         color, label = _SAFE, "SAFE"
-    # top bar
-    cv2.rectangle(f, (0, 0), (w, 50), _BG, -1)
-    cv2.putText(f, "AuraCare LIVE", (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255,255,255), 2)
-    bw = 350
-    cv2.rectangle(f, (w-bw-10, 5), (w-10, 45), color, -1)
-    cv2.putText(f, label, (w-bw+5, 37), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255,255,255), 2)
-    # bottom bar
-    cv2.rectangle(f, (0, h-40), (w, h), _BG, -1)
-    cv2.putText(f, f"Conf: {conf:.0%}  |  FPS: {fps:.0f}  |  Persons: {n_pers}",
-                (10, h-12), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200,200,200), 1)
-    # confidence bar
-    bx, by, bw2, bh = 10, 60, 200, 20
-    cv2.rectangle(f, (bx, by), (bx+bw2, by+bh), (80,80,80), -1)
-    fill = int(bw2 * min(conf, 1.0))
-    cv2.rectangle(f, (bx, by), (bx+fill, by+bh), color, -1)
-    cv2.rectangle(f, (bx, by), (bx+bw2, by+bh), (200,200,200), 1)
+        
+    # Top bar background with transparency
+    cv2.rectangle(overlay, (0, 0), (w, 60), (15, 20, 25), -1)
+    
+    # AuraCare LIVE logo area
+    cv2.putText(overlay, "AuraCare", (15, 40), cv2.FONT_HERSHEY_DUPLEX, 1.1, (255, 255, 255), 2, cv2.LINE_AA)
+    cv2.putText(overlay, "LIVE", (180, 40), cv2.FONT_HERSHEY_DUPLEX, 1.1, (50, 205, 50), 2, cv2.LINE_AA)
+    
+    # Status label background
+    bw = 360
+    cv2.rectangle(overlay, (w - bw - 15, 10), (w - 15, 50), color, -1)
+    cv2.putText(overlay, label, (w - bw + 10, 38), cv2.FONT_HERSHEY_DUPLEX, 0.9, (255, 255, 255), 2, cv2.LINE_AA)
+    
+    # Bottom bar background
+    cv2.rectangle(overlay, (0, h - 45), (w, h), (15, 20, 25), -1)
+    
+    # Blend overlay with frame
+    cv2.addWeighted(overlay, 0.85, f, 0.15, 0, f)
+    
+    # Bottom details (drawn directly on frame for sharpness)
+    details = f"Confidence: {conf:.0%}    |    FPS: {fps:.0f}    |    Persons Tracked: {n_pers}"
+    cv2.putText(f, details, (15, h - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (220, 220, 220), 1, cv2.LINE_AA)
+    
+    # Confidence bar area
+    bx, by, bw2, bh = 15, 75, 220, 18
+    # Background for bar
+    cv2.rectangle(f, (bx, by), (bx + bw2, by + bh), (40, 40, 40), -1)
+    
+    # Fill gradient-like effect based on confidence
+    fill_w = int(bw2 * min(conf, 1.0))
+    if fill_w > 0:
+        cv2.rectangle(f, (bx, by), (bx + fill_w, by + bh), color, -1)
+        
+    # Bar border
+    cv2.rectangle(f, (bx, by), (bx + bw2, by + bh), (150, 150, 150), 1)
+    
+    # Threshold indicator
     tx = bx + int(bw2 * thresh)
-    cv2.line(f, (tx, by-3), (tx, by+bh+3), (255,255,255), 2)
-    # per-person bars
+    cv2.line(f, (tx, by - 4), (tx, by + bh + 4), (255, 255, 255), 2)
+    cv2.putText(f, "THRESH", (tx - 20, by - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1, cv2.LINE_AA)
+    
+    # Per-person mini bars
     for pid, pc in enumerate(pp_conf):
-        my = by + bh + 8 + pid * 18
+        my = by + bh + 12 + pid * 22
         pcol = _PCOL[pid % 3]
-        cv2.putText(f, f"P{pid+1}", (bx, my+12), cv2.FONT_HERSHEY_SIMPLEX, 0.4, pcol, 1)
-        mbx, mbw = bx+25, bw2-25
-        cv2.rectangle(f, (mbx, my), (mbx+mbw, my+12), (60,60,60), -1)
+        
+        # Draw subject text
+        cv2.putText(f, f"SUBJ {pid+1}", (bx, my + 14), cv2.FONT_HERSHEY_SIMPLEX, 0.4, pcol, 1, cv2.LINE_AA)
+        
+        mbx, mbw = bx + 65, bw2 - 65
+        # Individual background
+        cv2.rectangle(f, (mbx, my), (mbx + mbw, my + 14), (50, 50, 50), -1)
+        
         mf = int(mbw * min(pc, 1.0))
         bc = _CRIT if pc >= thresh else pcol
-        cv2.rectangle(f, (mbx, my), (mbx+mf, my+12), bc, -1)
-        cv2.putText(f, f"{pc:.0%}", (mbx+mbw+5, my+11),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.35, (180,180,180), 1)
+        if mf > 0:
+            cv2.rectangle(f, (mbx, my), (mbx + mf, my + 14), bc, -1)
+            
+        cv2.putText(f, f"{pc:.0%}", (mbx + mbw + 8, my + 12), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1, cv2.LINE_AA)
 
 
 # ══════════════════════════════════════════════
@@ -301,19 +333,30 @@ class AggressionStreamEngine:
         self._alert_level = "SAFE"
         self._confidence = 0.0
         self._thread = None
+        self._last_error = ""
 
     def start(self):
         if self._running:
-            return
+            return True
+        acquired, owner = camera_arbiter.acquire("aggression_stream")
+        if not acquired:
+            self._last_error = (
+                f"Webcam is currently in use by {owner.replace('_', ' ')}. "
+                "Stop the other live camera first, then try aggression monitoring again."
+            )
+            return False
         self._running = True
+        self._last_error = ""
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
         print("  [STREAM] Engine started")
+        return True
 
     def stop(self):
         self._running = False
         if self._thread:
             self._thread.join(timeout=5)
+        camera_arbiter.release("aggression_stream")
         print("  [STREAM] Engine stopped")
 
     @property
@@ -323,6 +366,8 @@ class AggressionStreamEngine:
             "alert_level": self._alert_level,
             "confidence": round(self._confidence, 2),
             "device_id": self.device_id,
+            "error": self._last_error,
+            "camera_owner": camera_arbiter.current_owner(),
         }
 
     def _loop(self):
@@ -353,7 +398,12 @@ class AggressionStreamEngine:
         cap = cv2.VideoCapture(cam)
         if not cap.isOpened():
             print(f"  [STREAM] ERROR: Cannot open camera {self.camera_idx}")
+            self._last_error = (
+                "Unable to open the webcam for live aggression detection. "
+                "Make sure no other live camera feature is using it."
+            )
             self._running = False
+            camera_arbiter.release("aggression_stream")
             return
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
@@ -372,11 +422,16 @@ class AggressionStreamEngine:
                 fail_count += 1
                 if fail_count > 50:
                     print("  [STREAM] Camera failed to capture 50 consecutive frames. Stopping.")
+                    self._last_error = (
+                        "Aggression stream lost access to the webcam while running. "
+                        "If the meal camera was opened, stop it and restart aggression monitoring."
+                    )
                     self._running = False
                     break
                 time.sleep(0.01)
                 continue
             fail_count = 0
+            self._last_error = ""
 
             fc += 1
             now = time.time()
@@ -454,6 +509,7 @@ class AggressionStreamEngine:
         pose.close()
         cap.release()
         self._running = False
+        camera_arbiter.release("aggression_stream")
 
     def generate_mjpeg(self):
         """Yield MJPEG multipart frames for StreamingHttpResponse."""

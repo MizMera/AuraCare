@@ -3,7 +3,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth.password_validation import validate_password
 from .fall_incident import record_fall_incident
 from .aggression_incident import record_aggression_incident
-from .models import Device, HealthMetric, Incident, Resident, Zone, CustomUser
+from .models import Device, HealthMetric, Incident, Resident, Zone, CustomUser, MealTime, Notification
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
@@ -112,10 +112,11 @@ class IncidentSerializer(serializers.ModelSerializer):
     zone = ZoneSerializer(read_only=True)
     type_display = serializers.CharField(source='get_type_display', read_only=True)
     severity_display = serializers.CharField(source='get_severity_display', read_only=True)
+    meal_name = serializers.CharField(source='meal.name', read_only=True, allow_null=True)
 
     class Meta:
         model = Incident
-        fields = ['id', 'type', 'type_display', 'severity', 'severity_display', 'description', 'timestamp', 'zone']
+        fields = ['id', 'type', 'type_display', 'severity', 'severity_display', 'description', 'timestamp', 'zone', 'meal', 'meal_name']
 
 class ResidentDashboardSerializer(serializers.ModelSerializer):
     metrics = serializers.SerializerMethodField()
@@ -132,3 +133,25 @@ class ResidentDashboardSerializer(serializers.ModelSerializer):
     def get_incidents(self, obj):
         recent = obj.incidents.order_by('-timestamp')[:5]
         return IncidentSerializer(recent, many=True).data
+
+
+class MealTimeSerializer(serializers.ModelSerializer):
+    zone_name = serializers.CharField(source='zone.name', read_only=True)
+
+    class Meta:
+        model = MealTime
+        fields = ['id', 'name', 'time', 'expected_people', 'zone', 'zone_name']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source='user.username', read_only=True)
+    incident_type = serializers.CharField(source='incident.type', read_only=True, allow_null=True)
+    meal_name = serializers.CharField(source='meal.name', read_only=True, allow_null=True)
+
+    class Meta:
+        model = Notification
+        fields = [
+            'id', 'message', 'notification_type', 'status', 'is_read', 'created_at',
+            'user', 'user_name', 'incident', 'incident_type', 'meal', 'meal_name',
+            'resident',
+        ]

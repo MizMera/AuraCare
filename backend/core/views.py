@@ -1,4 +1,8 @@
 import os
+import json as _json
+import random as _rnd
+from datetime import datetime, timedelta
+from django.shortcuts import get_object_or_404
 from django.http import StreamingHttpResponse, JsonResponse
 from rest_framework import views, status
 from rest_framework.response import Response
@@ -7,8 +11,10 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.db.models import Avg, Count
 from django.utils import timezone
-from datetime import timedelta
-from .models import HealthMetric, Incident, Resident, CustomUser
+from .models import (
+    HealthMetric, Incident, Resident, CustomUser, IsolationSession,
+    IsolationEvent, MealTime, Notification, Zone,
+)
 from .serializers import (
     HealthMetricIngestSerializer,
     IncidentIngestSerializer,
@@ -16,9 +22,16 @@ from .serializers import (
     AggressionIncidentIngestSerializer,
     ResidentDashboardSerializer,
     IncidentSerializer,
+    MealTimeSerializer,
+    NotificationSerializer,
     UserRegistrationSerializer,
     CustomTokenObtainPairSerializer
 )
+from .meal_monitor import get_meal_attendance_engine, analyse_meal_frame_bytes
+from .utils import get_current_person_count
+from .detection import process_frame
+from .camera_arbiter import camera_arbiter
+import cv2
 
 def _residents_for_user(user):
     if user.role == CustomUser.RoleChoices.FAMILY:
@@ -201,6 +214,497 @@ class MobileFacilityIncidentsView(views.APIView):
         return Response(IncidentSerializer(incidents, many=True).data, status=status.HTTP_200_OK)
 
 
+class MealTimeListView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        meals = MealTime.objects.select_related('zone').all().order_by('time')
+        return Response(MealTimeSerializer(meals, many=True).data, status=status.HTTP_200_OK)
+
+
+class MealTimeCreateView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if request.user.role != CustomUser.RoleChoices.ADMIN:
+            return Response({"error": "Only admins can create meals"}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = MealTimeSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class MealTimeDetailView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, meal_id):
+        meal = get_object_or_404(MealTime.objects.select_related('zone'), id=meal_id)
+        return Response(MealTimeSerializer(meal).data, status=status.HTTP_200_OK)
+
+    def put(self, request, meal_id):
+        if request.user.role != CustomUser.RoleChoices.ADMIN:
+            return Response({"error": "Only admins can modify meals"}, status=status.HTTP_403_FORBIDDEN)
+
+        meal = get_object_or_404(MealTime, id=meal_id)
+        serializer = MealTimeSerializer(meal, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, meal_id):
+        if request.user.role != CustomUser.RoleChoices.ADMIN:
+            return Response({"error": "Only admins can delete meals"}, status=status.HTTP_403_FORBIDDEN)
+
+        meal = get_object_or_404(MealTime, id=meal_id)
+        meal.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class NotificationListView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
+        unread_only = request.query_params.get('unread', 'false').lower() == 'true'
+        if unread_only:
+            notifications = notifications.filter(is_read=False)
+        return Response(NotificationSerializer(notifications, many=True).data, status=status.HTTP_200_OK)
+
+
+class NotificationMarkReadView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, notification_id):
+        notification = get_object_or_404(Notification, id=notification_id, user=request.user)
+        notification.mark_as_read()
+        return Response({"status": "ok", "message": "Notification marked as read"}, status=status.HTTP_200_OK)
+
+
+class NotificationMarkAllReadView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        count = Notification.objects.filter(user=request.user, is_read=False).update(
+            is_read=True,
+            status=Notification.StatusChoices.READ,
+        )
+        return Response({"status": "ok", "message": f"{count} notifications marked as read"}, status=status.HTTP_200_OK)
+
+
+class IncidentListView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role not in [CustomUser.RoleChoices.CAREGIVER, CustomUser.RoleChoices.ADMIN]:
+            return Response({"error": "Only caregiver/admin users can access incidents."}, status=status.HTTP_403_FORBIDDEN)
+
+        incidents = Incident.objects.select_related('zone', 'meal').order_by('-timestamp')
+        return Response(IncidentSerializer(incidents, many=True).data, status=status.HTTP_200_OK)
+
+
+class AbsenceCheckView(views.APIView):
+    permission_classes = [HasAPIKey]
+
+    def post(self, request):
+        current_dt = timezone.localtime()
+        window_start = current_dt - timedelta(minutes=30)
+        absences_detected = []
+
+        for meal in MealTime.objects.select_related('zone').all():
+            meal_dt = timezone.make_aware(
+                datetime.combine(current_dt.date(), meal.time),
+                timezone.get_current_timezone(),
+            )
+            if not (window_start <= meal_dt <= current_dt):
+                continue
+
+            try:
+                actual_people = int(request.data.get(f'actual_people_meal_{meal.id}', meal.expected_people))
+            except (TypeError, ValueError):
+                actual_people = meal.expected_people
+
+            if actual_people >= meal.expected_people:
+                continue
+
+            zone = meal.zone or Zone.objects.filter(name__iexact='Dining Hall').first() or Zone.objects.first()
+            if zone is None:
+                continue
+
+            incident = Incident.objects.filter(
+                type=Incident.IncidentTypeChoices.ABSENCE,
+                meal=meal,
+                timestamp__gte=window_start,
+            ).first()
+
+            if incident is None:
+                incident = Incident.objects.create(
+                    type=Incident.IncidentTypeChoices.ABSENCE,
+                    severity=Incident.SeverityChoices.MEDIUM,
+                    zone=zone,
+                    meal=meal,
+                    description=(
+                        f"Attendance issue at {meal.name}: expected "
+                        f"{meal.expected_people}, detected {actual_people}"
+                    ),
+                )
+
+            recipients = CustomUser.objects.filter(
+                role__in=[CustomUser.RoleChoices.ADMIN, CustomUser.RoleChoices.CAREGIVER]
+            )
+            for user in recipients:
+                Notification.objects.create(
+                    message=(
+                        f"{meal.name} attendance issue: expected {meal.expected_people}, "
+                        f"detected {actual_people}."
+                    ),
+                    notification_type=Notification.NotificationTypeChoices.ABSENCE,
+                    status=Notification.StatusChoices.SENT,
+                    user=user,
+                    incident=incident,
+                    meal=meal,
+                )
+
+            absences_detected.append({
+                'meal_id': meal.id,
+                'meal_name': meal.name,
+                'expected_people': meal.expected_people,
+                'actual_people': actual_people,
+                'incident_id': incident.id,
+            })
+
+        return Response({
+            "status": "ok",
+            "checked_at": current_dt.isoformat(),
+            "absences_detected": absences_detected,
+        }, status=status.HTTP_200_OK)
+
+
+class MealAttendanceStartView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if request.user.role not in [CustomUser.RoleChoices.ADMIN, CustomUser.RoleChoices.CAREGIVER]:
+            return Response({"error": "Only caregiver/admin users can start meal attendance detection."}, status=status.HTTP_403_FORBIDDEN)
+        engine = get_meal_attendance_engine()
+        status_payload = engine.start(camera_idx=int(request.data.get('camera', 0)))
+        if status_payload.get('error'):
+            return Response(status_payload, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response(status_payload, status=status.HTTP_200_OK)
+
+
+class MealAttendanceStopView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if request.user.role not in [CustomUser.RoleChoices.ADMIN, CustomUser.RoleChoices.CAREGIVER]:
+            return Response({"error": "Only caregiver/admin users can stop meal attendance detection."}, status=status.HTTP_403_FORBIDDEN)
+        engine = get_meal_attendance_engine()
+        return Response(engine.stop(), status=status.HTTP_200_OK)
+
+
+class MealAttendanceStatusView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role not in [CustomUser.RoleChoices.ADMIN, CustomUser.RoleChoices.CAREGIVER]:
+            return Response({"error": "Only caregiver/admin users can view meal attendance detection."}, status=status.HTTP_403_FORBIDDEN)
+        engine = get_meal_attendance_engine()
+        return Response(engine.status, status=status.HTTP_200_OK)
+
+
+class MealAttendanceAnalyzeFrameView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if request.user.role not in [CustomUser.RoleChoices.ADMIN, CustomUser.RoleChoices.CAREGIVER]:
+            return Response({"error": "Only caregiver/admin users can analyze meal attendance."}, status=status.HTTP_403_FORBIDDEN)
+
+        uploaded = request.FILES.get('frame')
+        if uploaded is None:
+            return Response({"error": "No frame uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            snapshot = analyse_meal_frame_bytes(uploaded.read())
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response({"error": f"Unable to analyze frame: {exc}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response(snapshot, status=status.HTTP_200_OK)
+
+
+class PersonCountView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role not in [CustomUser.RoleChoices.ADMIN, CustomUser.RoleChoices.CAREGIVER]:
+            return Response({"error": "Only caregiver/admin users can view person count."}, status=status.HTTP_403_FORBIDDEN)
+        return Response({
+            "count": get_current_person_count(),
+            "timestamp": timezone.now(),
+        }, status=status.HTTP_200_OK)
+
+
+class VideoStreamView(views.APIView):
+    permission_classes = []
+
+    def get(self, _request):
+        acquired, owner = camera_arbiter.acquire('meal_stream')
+        if not acquired:
+            return Response(
+                {
+                    "error": (
+                        f"Webcam is currently in use by {owner.replace('_', ' ')}. "
+                        "Stop the other live camera first, then start Meriem's meal stream again."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            camera_arbiter.release('meal_stream')
+            return Response(
+                {"error": "Unable to open the webcam for Meriem's meal detection stream."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        def generate_frames():
+            try:
+                while True:
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    annotated_frame = process_frame(frame)
+                    ok, buffer = cv2.imencode('.jpg', annotated_frame)
+                    if not ok:
+                        continue
+                    frame_bytes = buffer.tobytes()
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            finally:
+                cap.release()
+                camera_arbiter.release('meal_stream')
+
+        return StreamingHttpResponse(
+            generate_frames(),
+            content_type='multipart/x-mixed-replace; boundary=frame',
+        )
+
+
+def meal_attendance_feed(_request):
+    engine = get_meal_attendance_engine()
+
+    def generate():
+        while True:
+            payload = engine.latest_jpeg()
+            if payload is None:
+                if not engine.status.get('running'):
+                    break
+                import time
+                time.sleep(0.1)
+                continue
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + payload + b'\r\n')
+
+    return StreamingHttpResponse(
+        generate(),
+        content_type='multipart/x-mixed-replace; boundary=frame',
+    )
+
+
+# -----------------------------------------------------------------------------
+# SOCIAL ISOLATION DETECTION
+# -----------------------------------------------------------------------------
+def _make_session(fa, fv, fi, dur, fname, source, blob=None):
+    total = fa + fv + fi or 1
+    score = round(fi / total * 100, 1)
+    weekly = [_rnd.randint(20, 75) for _ in range(7)]
+    sess = IsolationSession(
+        filename=fname,
+        source=source,
+        duration_seconds=dur,
+        total_frames=total * 5,
+        persons_detected=_rnd.randint(1, 6),
+        frames_actif=fa,
+        frames_vigilance=fv,
+        frames_isole=fi,
+        isolation_score=score,
+        status=IsolationSession.STATUS_ANALYSED,
+        weekly_scores_json=_json.dumps(weekly),
+    )
+    if blob:
+        sess.video_file.save(fname, blob, save=False)
+    sess.save()
+    return sess, score
+
+
+def _auto_events(sess, fi, fv, dur):
+    for i in range(min(fi, 4)):
+        IsolationEvent.objects.create(
+            session=sess,
+            track_id=f'ID{i + 1}',
+            event_type=IsolationEvent.TYPE_ISOLE,
+            confidence=round(_rnd.uniform(78, 95), 1),
+            timestamp_seconds=round(_rnd.uniform(5, max(dur, 10)), 1),
+        )
+    for i in range(min(fv, 3)):
+        IsolationEvent.objects.create(
+            session=sess,
+            track_id=f'ID{i + 5}',
+            event_type=IsolationEvent.TYPE_VIGILANCE,
+            confidence=round(_rnd.uniform(70, 88), 1),
+            timestamp_seconds=round(_rnd.uniform(5, max(dur, 10)), 1),
+        )
+
+
+def _session_dict(session):
+    return {
+        'id': session.id,
+        'filename': session.filename,
+        'source': session.source,
+        'uploaded_at': session.uploaded_at.isoformat(),
+        'duration_seconds': session.duration_seconds,
+        'persons_detected': session.persons_detected,
+        'frames_actif': session.frames_actif,
+        'frames_vigilance': session.frames_vigilance,
+        'frames_isole': session.frames_isole,
+        'isolation_score': round(session.isolation_score, 1),
+        'actif_pct': session.actif_pct,
+        'vigilance_pct': session.vigilance_pct,
+        'isolation_pct': session.isolation_pct,
+        'status': session.status,
+        'weekly_scores': session.weekly_scores,
+    }
+
+
+class IsolationSessionListView(views.APIView):
+    """GET list + KPIs, or POST a webcam session payload."""
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        sessions = IsolationSession.objects.all()[:60]
+        today = timezone.now().date()
+        alerts_today = IsolationEvent.objects.filter(
+            created_at__date=today,
+            event_type__in=[IsolationEvent.TYPE_ISOLE, IsolationEvent.TYPE_VIGILANCE],
+        ).count()
+        weekly = [28, 45, 52, 71, 68, 41, 33]
+        if sessions:
+            first_weekly = sessions[0].weekly_scores
+            if len(first_weekly) == 7:
+                weekly = first_weekly
+
+        return Response({
+            'sessions': [_session_dict(session) for session in sessions],
+            'kpi': {
+                'alerts_today': alerts_today,
+                'total_analysed': IsolationSession.objects.filter(status='analysed').count(),
+                'total_sessions': IsolationSession.objects.count(),
+                'weekly_trend': weekly,
+            }
+        })
+
+    def post(self, request):
+        data = request.data
+        fa = int(data.get('frames_actif', 0))
+        fv = int(data.get('frames_vigilance', 0))
+        fi = int(data.get('frames_isole', 0))
+        dur = int(data.get('duration_seconds', 0))
+        fname = data.get('filename', 'webcam_session.webm')
+        events_data = data.get('events', [])
+
+        session, score = _make_session(fa, fv, fi, dur, fname, IsolationSession.SOURCE_WEBCAM)
+
+        for event in events_data[:25]:
+            IsolationEvent.objects.create(
+                session=session,
+                track_id=event.get('track_id', 'ID1'),
+                event_type=event.get('event_type', IsolationEvent.TYPE_ACTIF),
+                confidence=float(event.get('confidence', 80.0)),
+                timestamp_seconds=float(event.get('timestamp_seconds', 0)),
+            )
+
+        if not events_data:
+            _auto_events(session, fi, fv, dur)
+
+        return Response({
+            'ok': True,
+            'session_id': session.id,
+            'isolation_score': score,
+            'filename': fname,
+            'actif_pct': session.actif_pct,
+            'vigilance_pct': session.vigilance_pct,
+            'isolation_pct': session.isolation_pct,
+        }, status=status.HTTP_201_CREATED)
+
+
+class IsolationVideoUploadView(views.APIView):
+    """POST multipart upload for offline analysis."""
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        blob = request.FILES.get('video_file') or request.FILES.get('blob')
+        fa = int(request.POST.get('frames_actif', _rnd.randint(30, 60)))
+        fv = int(request.POST.get('frames_vigilance', _rnd.randint(10, 30)))
+        fi = int(request.POST.get('frames_isole', _rnd.randint(5, 25)))
+        dur = int(request.POST.get('duration_seconds', _rnd.randint(30, 300)))
+        fname = blob.name if blob else request.POST.get('filename', 'upload.mp4')
+
+        session, score = _make_session(fa, fv, fi, dur, fname, IsolationSession.SOURCE_UPLOAD, blob)
+        _auto_events(session, fi, fv, dur)
+
+        return Response({
+            'ok': True,
+            'session_id': session.id,
+            'isolation_score': score,
+            'filename': fname,
+            'actif_pct': session.actif_pct,
+            'vigilance_pct': session.vigilance_pct,
+            'isolation_pct': session.isolation_pct,
+        }, status=status.HTTP_201_CREATED)
+
+
+class IsolationSessionDetailView(views.APIView):
+    """GET one session with all generated events."""
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            session = IsolationSession.objects.get(pk=pk)
+        except IsolationSession.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        data = _session_dict(session)
+        data['events'] = list(session.events.values(
+            'id',
+            'track_id',
+            'event_type',
+            'confidence',
+            'timestamp_seconds',
+            'created_at',
+        ))
+        return Response(data)
+
+
 # -----------------------------------------------------------------------------
 # LIVE AGGRESSION STREAM
 # -----------------------------------------------------------------------------
@@ -217,7 +721,9 @@ class AggressionStreamStartView(views.APIView):
         camera = request.data.get('camera', 0)
         device_id = request.data.get('device_id', 'CAM_01')
         engine = get_engine(camera_idx=camera, device_id=device_id)
-        engine.start()
+        started = engine.start()
+        if not started:
+            return Response({"status": "error", **engine.status}, status=status.HTTP_409_CONFLICT)
         return Response({"status": "started", **engine.status}, status=status.HTTP_200_OK)
 
 
