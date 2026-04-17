@@ -1,6 +1,8 @@
+import json as _json
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
 
 class CustomUser(AbstractUser):
     class RoleChoices(models.TextChoices):
@@ -126,3 +128,90 @@ class ScheduleEvent(models.Model):
 
     def __str__(self):
         return f"{self.name} at {self.expected_zone.name}"
+
+
+# ─────────────────────────────────────────────────────────────
+# Social Isolation Detection — YOLOv8 + DeepSORT + LSTM
+# ─────────────────────────────────────────────────────────────
+
+class IsolationSession(models.Model):
+    """One row per video analysis or webcam session."""
+    SOURCE_UPLOAD = 'upload'
+    SOURCE_WEBCAM = 'webcam'
+    SOURCE_CHOICES = [(SOURCE_UPLOAD, 'Video Upload'), (SOURCE_WEBCAM, 'Webcam Live')]
+
+    STATUS_PENDING  = 'pending'
+    STATUS_ANALYSED = 'analysed'
+    STATUS_ERROR    = 'error'
+    STATUS_CHOICES  = [
+        (STATUS_PENDING, 'Pending'), (STATUS_ANALYSED, 'Analysed'), (STATUS_ERROR, 'Error')
+    ]
+
+    filename          = models.CharField(max_length=255)
+    source            = models.CharField(max_length=20, choices=SOURCE_CHOICES, default=SOURCE_UPLOAD)
+    video_file        = models.FileField(upload_to='isolation_videos/', blank=True, null=True)
+    uploaded_at       = models.DateTimeField(default=timezone.now)
+    duration_seconds  = models.PositiveIntegerField(default=0)
+    total_frames      = models.PositiveIntegerField(default=0)
+    persons_detected  = models.PositiveIntegerField(default=0)
+    frames_actif      = models.PositiveIntegerField(default=0)
+    frames_vigilance  = models.PositiveIntegerField(default=0)
+    frames_isole      = models.PositiveIntegerField(default=0)
+    isolation_score   = models.FloatField(default=0.0)          # 0–100
+    status            = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    weekly_scores_json = models.TextField(default='[]')         # JSON list[7]
+    notes             = models.TextField(blank=True)
+    resident          = models.ForeignKey(
+        Resident, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='isolation_sessions'
+    )
+
+    class Meta:
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return self.filename
+
+    @property
+    def weekly_scores(self):
+        try:    return _json.loads(self.weekly_scores_json)
+        except: return []
+
+    @property
+    def _total(self):
+        return self.frames_actif + self.frames_vigilance + self.frames_isole or 1
+
+    @property
+    def actif_pct(self):
+        return round(self.frames_actif / self._total * 100)
+
+    @property
+    def vigilance_pct(self):
+        return round(self.frames_vigilance / self._total * 100)
+
+    @property
+    def isolation_pct(self):
+        return round(self.frames_isole / self._total * 100)
+
+
+class IsolationEvent(models.Model):
+    """One row per LSTM detection event inside a session."""
+    TYPE_ISOLE     = 'isole'
+    TYPE_VIGILANCE = 'vigilance'
+    TYPE_ACTIF     = 'actif'
+    TYPE_CHOICES   = [
+        (TYPE_ISOLE, 'Isolé'), (TYPE_VIGILANCE, 'Vigilance'), (TYPE_ACTIF, 'Actif')
+    ]
+
+    session           = models.ForeignKey(IsolationSession, on_delete=models.CASCADE, related_name='events')
+    track_id          = models.CharField(max_length=50)
+    event_type        = models.CharField(max_length=20, choices=TYPE_CHOICES, default=TYPE_ISOLE)
+    confidence        = models.FloatField(default=0.0)          # 0–100
+    timestamp_seconds = models.FloatField(default=0.0)
+    created_at        = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.get_event_type_display()} — {self.track_id} @ {self.timestamp_seconds}s"

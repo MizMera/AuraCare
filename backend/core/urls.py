@@ -1,17 +1,21 @@
 from django.urls import path
 from .views import (
-    TelemetryIngestView, 
+    TelemetryIngestView,
     IncidentIngestView,
     MobileDashboardView,
-    MobileActivityLogView
+    MobileActivityLogView,
+    IsolationSessionListView,
+    IsolationVideoUploadView,
+    IsolationSessionDetailView,
 )
 
 urlpatterns = [
-    # AI Ingestion Webhooks (Secured via custom X-API-KEY)
     path('ingest/telemetry/', TelemetryIngestView.as_view(), name='ingest-telemetry'),
     path('ingest/incident/', IncidentIngestView.as_view(), name='ingest-incident'),
-
-    # Mobile App API Endpoints (Secured via SimpleJWT)
     path('mobile/dashboard/', MobileDashboardView.as_view(), name='mobile-dashboard'),
     path('mobile/activity-log/', MobileActivityLogView.as_view(), name='mobile-activity-log'),
+    # Isolation Detection
+    path('isolation/sessions/', IsolationSessionListView.as_view(), name='isolation-sessions'),
+    path('isolation/sessions/<int:pk>/', IsolationSessionDetailView.as_view(), name='isolation-session-detail'),
+    path('isolation/upload/', IsolationVideoUploadView.as_view(), name='isolation-upload'),
 ]
