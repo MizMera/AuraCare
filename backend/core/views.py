@@ -1,4 +1,5 @@
 import os
+from django.http import StreamingHttpResponse, JsonResponse
 from rest_framework import views, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, BasePermission
@@ -12,6 +13,7 @@ from .serializers import (
     HealthMetricIngestSerializer,
     IncidentIngestSerializer,
     FallIncidentIngestSerializer,
+    AggressionIncidentIngestSerializer,
     ResidentDashboardSerializer,
     IncidentSerializer,
     UserRegistrationSerializer,
@@ -108,6 +110,23 @@ class FallIncidentIngestView(views.APIView):
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+class AggressionIncidentIngestView(views.APIView):
+    """
+    Aggression detection webhook: pass device_id only; zone is resolved from Device.zone.
+    Always creates type=AGGRESSION, severity=HIGH, resident=null.
+    """
+    permission_classes = [HasAPIKey]
+
+    def post(self, request, *args, **kwargs):
+        serializer = AggressionIncidentIngestSerializer(data=request.data)
+        if serializer.is_valid():
+            incident = serializer.save()
+            return Response(
+                {"status": "success", "data": IncidentSerializer(incident).data},
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 class MobileDashboardView(views.APIView):
     """
     Returns recent metrics and incidents for the assigned residents.
@@ -180,3 +199,56 @@ class MobileFacilityIncidentsView(views.APIView):
 
         incidents = Incident.objects.select_related('zone').order_by('-timestamp')[:30]
         return Response(IncidentSerializer(incidents, many=True).data, status=status.HTTP_200_OK)
+
+
+# -----------------------------------------------------------------------------
+# LIVE AGGRESSION STREAM
+# -----------------------------------------------------------------------------
+from .aggression_stream import get_engine
+
+class AggressionStreamStartView(views.APIView):
+    """
+    POST: Start the live aggression detection stream.
+    Body (optional): { "camera": 0, "device_id": "CAM_01" }
+    """
+    permission_classes = [HasAPIKey]
+
+    def post(self, request):
+        camera = request.data.get('camera', 0)
+        device_id = request.data.get('device_id', 'CAM_01')
+        engine = get_engine(camera_idx=camera, device_id=device_id)
+        engine.start()
+        return Response({"status": "started", **engine.status}, status=status.HTTP_200_OK)
+
+
+class AggressionStreamStopView(views.APIView):
+    """POST: Stop the live aggression detection stream."""
+    permission_classes = [HasAPIKey]
+
+    def post(self, request):
+        engine = get_engine()
+        engine.stop()
+        return Response({"status": "stopped"}, status=status.HTTP_200_OK)
+
+
+class AggressionStreamStatusView(views.APIView):
+    """GET: Get the current status of the aggression stream."""
+    permission_classes = []
+
+    def get(self, request):
+        engine = get_engine()
+        return Response(engine.status, status=status.HTTP_200_OK)
+
+
+def aggression_stream_feed(request):
+    """
+    MJPEG video feed endpoint.
+    Usage: <img src="http://localhost:8000/api/stream/aggression/feed/" />
+    """
+    engine = get_engine()
+    if not engine._running:
+        return JsonResponse({"error": "Stream not started. POST to /api/stream/aggression/start/ first."}, status=503)
+    return StreamingHttpResponse(
+        engine.generate_mjpeg(),
+        content_type='multipart/x-mixed-replace; boundary=frame',
+    )

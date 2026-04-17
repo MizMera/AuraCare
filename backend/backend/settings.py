@@ -119,7 +119,12 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
+from corsheaders.defaults import default_headers
+
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'x-api-key',
+]
 
 # Fall detection (YOLO pose + LSTM). Weights: backend/models/fall_detection_model.pth
 FALL_DETECTION = {
