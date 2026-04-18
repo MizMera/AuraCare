@@ -311,3 +311,40 @@ class IsolationEvent(models.Model):
 
     def __str__(self):
         return f"{self.get_event_type_display()} — {self.track_id} @ {self.timestamp_seconds}s"
+class GaitObservation(models.Model):
+    class LabelChoices(models.TextChoices):
+        NORMAL = 'normal', _('Normal')
+        ABNORMAL = 'abnormal', _('Abnormal')
+
+    resident = models.ForeignKey(
+        Resident,
+        on_delete=models.CASCADE,
+        related_name='gait_observations',
+        null=True,
+        blank=True,
+    )
+    zone = models.ForeignKey(
+        Zone,
+        on_delete=models.CASCADE,
+        related_name='gait_observations',
+        null=True,
+        blank=True,
+    )
+    label = models.CharField(max_length=20, choices=LabelChoices.choices)
+    confidence = models.FloatField()
+    stride_length = models.FloatField(default=0)
+    walking_speed = models.FloatField(default=0)
+    arm_swing = models.FloatField(default=0)
+    step_variability = models.FloatField(default=0)
+    cadence = models.FloatField(default=0)
+    height_ratio = models.FloatField(default=0)
+    recorded_at = models.DateTimeField(auto_now_add=True)
+    alert_triggered = models.BooleanField(default=False)
+    snapshot = models.ImageField(upload_to='gait_snapshots/', null=True, blank=True)
+
+    class Meta:
+        ordering = ['-recorded_at']
+
+    def __str__(self):
+        resident_name = self.resident.name if self.resident else 'Unknown'
+        return f'{resident_name} - {self.label} ({self.confidence:.0f}%)'

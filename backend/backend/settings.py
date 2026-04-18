@@ -3,6 +3,8 @@ from pathlib import Path
 from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_SQLITE_DB_FILENAME = 'db_gait.sqlite3' if (BASE_DIR / 'db_gait.sqlite3').exists() else 'db.sqlite3'
+SQLITE_DB_FILENAME = os.environ.get('AURACARE_DB_FILENAME', DEFAULT_SQLITE_DB_FILENAME)
 
 SECRET_KEY = 'django-insecure-silverguard-placeholder-key'
 DEBUG = True
@@ -62,7 +64,7 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': BASE_DIR / SQLITE_DB_FILENAME,
     }
 }
 

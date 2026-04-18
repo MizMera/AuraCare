@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import SocialInteraction from './SocialInteraction';
 import NotificationBell from '../components/NotificationBell';
+import GaitAnalysisPanel from '../components/GaitAnalysisPanel';
 import { mealService } from '../services/mealService';
 
 const API_HOST = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
@@ -678,13 +679,17 @@ function StaffDashboard({ token, onLogout, role }) {
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--alice-blue)' }}>
       <aside style={{ width: '260px', backgroundColor: 'var(--midnight-green)', color: 'white', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-          <Link to="/"><img src="/LOGO_AURACARE.png" alt="AuraCare Logo" style={{ height: '40px' }} /></Link>
+          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', color: 'white', fontSize: '1.5rem', fontWeight: 'bold' }}>
+            <img src="/LOGO_AURACARE.png" alt="AuraCare Logo" style={{ height: '40px' }} />
+            AuraCare
+          </Link>
         </div>
         <nav style={{ flex: 1, padding: '1rem' }}>
           <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', listStyle: 'none', padding: 0 }}>
             <li><button type="button" onClick={() => setStaffSection('residents')} style={navBtn(staffSection === 'residents')}><Users size={18} /> Assigned Residents</button></li>
             <li><button type="button" onClick={() => setStaffSection('incidents')} style={navBtn(staffSection === 'incidents')}><ShieldAlert size={18} /> Facility Incidents</button></li>
             <li><button type="button" onClick={() => setStaffSection('meals')} style={navBtn(staffSection === 'meals')}><UtensilsCrossed size={18} /> Meals & Alerts</button></li>
+            <li><button type="button" onClick={() => setStaffSection('gait')} style={navBtn(staffSection === 'gait')}><Activity size={18} /> Gait Analysis</button></li>
             <li><button type="button" onClick={() => setStaffSection('livefeed')} style={navBtn(staffSection === 'livefeed')}><Video size={18} /> Live Feed</button></li>
             <li><button type="button" onClick={() => setStaffSection('combi')} style={navBtn(staffSection === 'combi')}><Brain size={18} /> Social Interaction</button></li>
           </ul>
@@ -715,13 +720,16 @@ function StaffDashboard({ token, onLogout, role }) {
               <h1 style={{ color: 'var(--midnight-green)', margin: 0 }}>Caregiver Dashboard</h1>
               <p style={{ color: 'var(--text-light)', margin: 0 }}>
                 {staffSection === 'livefeed' ? 'Monitor live aggression detection feeds' :
+                  staffSection === 'gait' ? 'Review Yomna’s gait-analysis results and launch new recordings' :
                   staffSection === 'meals' ? 'Coordinate Meriem’s meal schedule and related alerts' :
                     staffSection === 'incidents' ? 'View all facility incidents and history' :
                       'Monitor all assigned residents for your shift'}
               </p>
             </header>
 
-            {staffSection === 'meals' ? (
+            {staffSection === 'gait' ? (
+              <GaitAnalysisPanel token={token} onLogout={onLogout} />
+            ) : staffSection === 'meals' ? (
               <MealManagementPanel token={token} role={role} incidents={facilityIncidents} onLogout={onLogout} />
             ) : staffSection === 'livefeed' ? (
               <div style={sectionCardStyle}>
@@ -919,7 +927,10 @@ function FamilyDashboard({ token, onLogout }) {
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--alice-blue)' }}>
       <aside style={{ width: '260px', backgroundColor: 'var(--midnight-green)', color: 'white', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-          <Link to="/"><img src="/LOGO_AURACARE.png" alt="AuraCare Logo" style={{ height: '40px' }} /></Link>
+          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', color: 'white', fontSize: '1.5rem', fontWeight: 'bold' }}>
+            <img src="/LOGO_AURACARE.png" alt="AuraCare Logo" style={{ height: '40px' }} />
+            AuraCare
+          </Link>
         </div>
         <nav style={{ flex: 1, padding: '1rem' }}>
           <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', listStyle: 'none', padding: 0 }}>

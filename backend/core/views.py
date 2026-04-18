@@ -1,10 +1,14 @@
 import os
 import json as _json
 import random as _rnd
+import subprocess
+import sys
+from pathlib import Path
 from datetime import datetime, timedelta
+from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.http import StreamingHttpResponse, JsonResponse
-from rest_framework import views, status
+from rest_framework import views, status, parsers
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, BasePermission
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -13,7 +17,7 @@ from django.db.models import Avg, Count
 from django.utils import timezone
 from .models import (
     HealthMetric, Incident, Resident, CustomUser, IsolationSession,
-    IsolationEvent, MealTime, Notification, Zone,
+    IsolationEvent, MealTime, Notification, Zone, GaitObservation,
 )
 from .serializers import (
     HealthMetricIngestSerializer,
@@ -212,6 +216,207 @@ class MobileFacilityIncidentsView(views.APIView):
 
         incidents = Incident.objects.select_related('zone').order_by('-timestamp')[:30]
         return Response(IncidentSerializer(incidents, many=True).data, status=status.HTTP_200_OK)
+
+
+def _serialize_gait_observation(observation):
+    return {
+        'id': observation.id,
+        'label': observation.label,
+        'confidence': observation.confidence,
+        'recorded_at': observation.recorded_at,
+        'alert_triggered': observation.alert_triggered,
+        'snapshot': observation.snapshot.url if observation.snapshot else None,
+        'features': {
+            'stride_length': observation.stride_length,
+            'walking_speed': observation.walking_speed,
+            'arm_swing': observation.arm_swing,
+            'step_variability': observation.step_variability,
+            'cadence': observation.cadence,
+            'height_ratio': observation.height_ratio,
+        },
+    }
+
+
+def _serialize_resident_gait_summary(resident, observations):
+    return {
+        'resident_id': resident.id,
+        'resident_name': resident.name,
+        'room_number': resident.room_number,
+        'age': resident.age,
+        'risk_level': resident.risk_level,
+        'observations': [_serialize_gait_observation(observation) for observation in observations],
+    }
+
+
+def _resolve_gait_runtime():
+    repo_root = Path(settings.BASE_DIR).parent
+    gait_dir = repo_root / 'gait_model'
+    gait_script = gait_dir / 'realtime_gait_v4.py'
+    interpreter_candidates = [
+        gait_dir / 'gait_env' / 'Scripts' / 'python.exe',
+        repo_root / '.venv' / 'Scripts' / 'python.exe',
+        Path(sys.executable),
+    ]
+
+    interpreter = next((candidate for candidate in interpreter_candidates if candidate.exists()), None)
+    return gait_script, interpreter, gait_dir
+
+
+class GaitIngestView(views.APIView):
+    permission_classes = [HasAPIKey]
+    parser_classes = [parsers.MultiPartParser, parsers.JSONParser]
+
+    def post(self, request, *args, **kwargs):
+        patient_id = request.data.get('patient_id')
+        zone_name = request.data.get('zone', 'East Wing Corridor')
+        label = request.data.get('label', GaitObservation.LabelChoices.NORMAL)
+        confidence = float(request.data.get('confidence', 0) or 0)
+        features = request.data.get('features', {})
+        snapshot = request.FILES.get('snapshot')
+
+        if isinstance(features, str):
+            try:
+                features = _json.loads(features)
+            except Exception:
+                features = {}
+
+        resident = None
+        if patient_id and patient_id != 'unknown':
+            resident = Resident.objects.filter(name__icontains=patient_id).first()
+
+        zone = Zone.objects.filter(name__icontains=zone_name).first() or Zone.objects.first()
+        if zone is None:
+            zone = Zone.objects.create(name=zone_name or 'East Wing Corridor', type='Corridor', floor_type='Ground')
+
+        alert_triggered = False
+        if resident and label == GaitObservation.LabelChoices.ABNORMAL:
+            four_days_ago = timezone.now() - timedelta(days=4)
+            recent_abnormal_count = GaitObservation.objects.filter(
+                resident=resident,
+                label=GaitObservation.LabelChoices.ABNORMAL,
+                recorded_at__gte=four_days_ago,
+            ).count()
+            if recent_abnormal_count >= 3:
+                alert_triggered = True
+                Incident.objects.create(
+                    resident=resident,
+                    zone=zone,
+                    type=Incident.IncidentTypeChoices.FALL,
+                    severity=Incident.SeverityChoices.HIGH,
+                    description=f'Abnormal gait detected. Confidence: {confidence:.0f}%',
+                )
+
+        observation = GaitObservation.objects.create(
+            resident=resident,
+            zone=zone,
+            label=label,
+            confidence=confidence,
+            stride_length=features.get('stride_length', 0) or 0,
+            walking_speed=features.get('walking_speed', 0) or 0,
+            arm_swing=features.get('arm_swing', 0) or 0,
+            step_variability=features.get('step_variability', 0) or 0,
+            cadence=features.get('cadence', 0) or 0,
+            height_ratio=features.get('height_ratio', 0) or 0,
+            alert_triggered=alert_triggered,
+            snapshot=snapshot,
+        )
+
+        return Response(
+            {
+                'status': 'success',
+                'observation_id': observation.id,
+                'alert_triggered': alert_triggered,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class GaitHistoryView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, resident_id, *args, **kwargs):
+        resident = get_object_or_404(Resident, id=resident_id)
+        allowed_residents = _residents_for_user(request.user)
+        if request.user.role != CustomUser.RoleChoices.ADMIN and not allowed_residents.filter(id=resident.id).exists():
+            return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+        observations = GaitObservation.objects.filter(resident=resident).order_by('-recorded_at')[:20]
+        return Response(
+            [_serialize_gait_observation(observation) for observation in observations],
+            status=status.HTTP_200_OK,
+        )
+
+
+class GaitAllResidentsView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        residents = _residents_for_user(request.user)
+        if request.user.role not in [CustomUser.RoleChoices.CAREGIVER, CustomUser.RoleChoices.ADMIN]:
+            return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+        data = []
+        for resident in residents:
+            observations = resident.gait_observations.order_by('-recorded_at')[:20]
+            data.append(_serialize_resident_gait_summary(resident, observations))
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class AnalyzeVideoView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    parser_classes = [parsers.MultiPartParser]
+
+    def post(self, request, *args, **kwargs):
+        video_file = request.FILES.get('video')
+        if not video_file:
+            return Response({'error': 'No video provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+        gait_script, interpreter, gait_dir = _resolve_gait_runtime()
+        if not gait_script.exists():
+            return Response(
+                {'error': "Yomna's gait model files are missing from the repository."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        if interpreter is None:
+            return Response(
+                {'error': 'No Python runtime is available to launch the gait model.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        upload_dir = Path(settings.MEDIA_ROOT) / 'uploads'
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
+        safe_name = f'{timestamp}_{Path(video_file.name).name}'
+        video_path = upload_dir / safe_name
+
+        with video_path.open('wb+') as destination:
+            for chunk in video_file.chunks():
+                destination.write(chunk)
+
+        try:
+            subprocess.Popen(
+                [str(interpreter), str(gait_script), '--mode', 'video', '--path', str(video_path)],
+                cwd=str(gait_dir),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception as exc:
+            return Response(
+                {'error': f'Unable to start gait analysis: {exc}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(
+            {
+                'status': 'analysis_started',
+                'message': f'Analyzing {video_file.name}. Yomna’s gait results will appear in the dashboard shortly.',
+                'video': safe_name,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 class MealTimeListView(views.APIView):
