@@ -1,0 +1,450 @@
+{
+  "patients": {
+    "001": {
+      "name": "Patient 001",
+      "subject_id": "001",
+      "reg_sequences": [
+        "nm-01",
+        "nm-04"
+      ],
+      "signature": {
+        "width": 56.24076876513317,
+        "height": 142.7537832929782,
+        "h_w_ratio": 2.7448771509952565,
+        "fill_ratio": 0.42413907261748907,
+        "head_w": 17.692173531319924,
+        "torso_w": 27.677124591793923,
+        "legs_w": 26.929963898296116,
+        "upper_asym": 0.3745104306712757,
+        "stride_length": 9.6828991971655,
+        "walking_speed": 4.84144959858275,
+        "arm_swing": 3.3805247786780392,
+        "step_variability": 0.48377841253410847,
+        "cadence": 0.17312348668280872,
+        "height_ratio": 2.7448771509952565
+      },
+      "sessions": []
+    },
+    "002": {
+      "name": "Patient 002",
+      "subject_id": "002",
+      "reg_sequences": [
+        "nm-01",
+        "nm-04"
+      ],
+      "signature": {
+        "width": 55.64824355971897,
+        "height": 117.03161592505855,
+        "h_w_ratio": 2.256402208021221,
+        "fill_ratio": 0.42787383299779014,
+        "head_w": 19.294291825953415,
+        "torso_w": 26.453729160842784,
+        "legs_w": 26.28066724724915,
+        "upper_asym": 0.34333049967869145,
+        "stride_length": 8.140619912469978,
+        "walking_speed": 4.070309956234989,
+        "arm_swing": 5.2958597887558,
+        "step_variability": 0.613025448062488,
+        "cadence": 0.21370023419203746,
+        "height_ratio": 2.256402208021221
+      },
+      "sessions": []
+    },
+    "003": {
+      "name": "Patient 003",
+      "subject_id": "003",
+      "reg_sequences": [
+        "nm-01",
+        "nm-04"
+      ],
+      "signature": {
+        "width": 53.22629310344828,
+        "height": 127.42160560344828,
+        "h_w_ratio": 2.6015539124853726,
+        "fill_ratio": 0.4268626152746712,
+        "head_w": 16.532962574112734,
+        "torso_w": 24.74668125703343,
+        "legs_w": 27.66213563848969,
+        "upper_asym": 0.35320643208029273,
+        "stride_length": 8.724887598191668,
+        "walking_speed": 4.362443799095834,
+        "arm_swing": 2.848607143240545,
+        "step_variability": 0.4277557890145527,
+        "cadence": 0.1635237068965517,
+        "height_ratio": 2.6015539124853726
+      },
+      "sessions": []
+    },
+    "004": {
+      "name": "Patient 004",
+      "subject_id": "004",
+      "reg_sequences": [
+        "nm-01",
+        "nm-04"
+      ],
+      "signature": {
+        "width": 50.89993606138107,
+        "height": 132.72985933503836,
+        "h_w_ratio": 2.8214729465212587,
+        "fill_ratio": 0.4423297028363814,
+        "head_w": 16.74984838515923,
+        "torso_w": 24.5083982873004,
+        "legs_w": 26.720228630780362,
+        "upper_asym": 0.39001603649476235,
+        "stride_length": 7.997205385840385,
+        "walking_speed": 3.9986026929201923,
+        "arm_swing": 1.7123955871473413,
+        "step_variability": 0.47402822846481185,
+        "cadence": 0.21174339300937767,
+        "height_ratio": 2.8214729465212587
+      },
+      "sessions": []
+    },
+    "011": {
+      "name": "Patient 011",
+      "subject_id": "011",
+      "reg_sequences": [
+        "nm-01",
+        "nm-04"
+      ],
+      "signature": {
+        "width": 51.14002089864159,
+        "height": 138.52899686520377,
+        "h_w_ratio": 2.879269017526736,
+        "fill_ratio": 0.4432725000844564,
+        "head_w": 17.34739029769046,
+        "torso_w": 26.71465560756615,
+        "legs_w": 25.404967567777987,
+        "upper_asym": 0.417559440182775,
+        "stride_length": 8.855451411338326,
+        "walking_speed": 4.427725705669163,
+        "arm_swing": 2.086726009236753,
+        "step_variability": 0.5838893861172628,
+        "cadence": 0.19331243469174503,
+        "height_ratio": 2.879269017526736
+      },
+      "sessions": []
+    },
+    "006": {
+      "name": "Patient 006",
+      "subject_id": "006",
+      "reg_sequences": [
+        "nm-01",
+        "nm-04"
+      ],
+      "signature": {
+        "width": 57.54082137555666,
+        "height": 131.6016823354775,
+        "h_w_ratio": 2.5176558488463927,
+        "fill_ratio": 0.402747359793995,
+        "head_w": 16.113907405039626,
+        "torso_w": 26.014740265588358,
+        "legs_w": 27.426775037401768,
+        "upper_asym": 0.3097397823031173,
+        "stride_length": 11.452577355490476,
+        "walking_speed": 5.726288677745238,
+        "arm_swing": 4.366111018706587,
+        "step_variability": 0.6226522193324198,
+        "cadence": 0.18876793666501732,
+        "height_ratio": 2.5176558488463927
+      },
+      "sessions": []
+    },
+    "007": {
+      "name": "Patient 007",
+      "subject_id": "007",
+      "reg_sequences": [
+        "nm-01",
+        "nm-04"
+      ],
+      "signature": {
+        "width": 51.85714285714286,
+        "height": 127.27678571428571,
+        "h_w_ratio": 2.658288361048621,
+        "fill_ratio": 0.4287273231306855,
+        "head_w": 17.287712511532753,
+        "torso_w": 26.604693297450417,
+        "legs_w": 23.266331084542227,
+        "upper_asym": 0.330719375487329,
+        "stride_length": 9.85719784142557,
+        "walking_speed": 4.928598920712785,
+        "arm_swing": 2.695419463699653,
+        "step_variability": 0.4756444502572612,
+        "cadence": 0.19642857142857142,
+        "height_ratio": 2.658288361048621
+      },
+      "sessions": []
+    },
+    "008": {
+      "name": "Patient 008",
+      "subject_id": "008",
+      "reg_sequences": [
+        "nm-01",
+        "nm-04"
+      ],
+      "signature": {
+        "width": 47.40091848450057,
+        "height": 120.08530424799082,
+        "h_w_ratio": 2.770006958475175,
+        "fill_ratio": 0.427809477594123,
+        "head_w": 15.899480506201172,
+        "torso_w": 22.677738752100147,
+        "legs_w": 22.6488581633046,
+        "upper_asym": 0.3737728940480465,
+        "stride_length": 8.252063974743244,
+        "walking_speed": 4.126031987371622,
+        "arm_swing": 2.6733166693954384,
+        "step_variability": 0.3560028690831848,
+        "cadence": 0.19724454649827783,
+        "height_ratio": 2.770006958475175
+      },
+      "sessions": []
+    },
+    "009": {
+      "name": "Patient 009",
+      "subject_id": "009",
+      "reg_sequences": [
+        "nm-01",
+        "nm-04"
+      ],
+      "signature": {
+        "width": 54.40402757619739,
+        "height": 132.14132801161102,
+        "h_w_ratio": 2.676989696543057,
+        "fill_ratio": 0.44056570498936776,
+        "head_w": 17.719356149676464,
+        "torso_w": 26.374570033776376,
+        "legs_w": 27.156767260395497,
+        "upper_asym": 0.32683812143095625,
+        "stride_length": 10.1789021781886,
+        "walking_speed": 5.0894510890943,
+        "arm_swing": 2.3968930150881897,
+        "step_variability": 0.42732886710242746,
+        "cadence": 0.1812409288824383,
+        "height_ratio": 2.676989696543057
+      },
+      "sessions": []
+    },
+    "010": {
+      "name": "Patient 010",
+      "subject_id": "010",
+      "reg_sequences": [
+        "nm-01",
+        "nm-04"
+      ],
+      "signature": {
+        "width": 55.15858613217768,
+        "height": 134.7203412784399,
+        "h_w_ratio": 2.6658957131450816,
+        "fill_ratio": 0.40765646187778165,
+        "head_w": 16.110371625064232,
+        "torso_w": 25.207580646219313,
+        "legs_w": 26.188473183422374,
+        "upper_asym": 0.4118620262680994,
+        "stride_length": 8.8707969735247,
+        "walking_speed": 4.43539848676235,
+        "arm_swing": 3.5447063058859696,
+        "step_variability": 0.5159102256341005,
+        "cadence": 0.1851300108342362,
+        "height_ratio": 2.6658957131450816
+      },
+      "sessions": []
+    },
+    "P011": {
+      "name": "patient1",
+      "signature": {
+        "h_w_ratio": 2.5994357423865004,
+        "fill_ratio": 0.4575900057294563,
+        "torso_w": 36.67130367019461,
+        "legs_w": 34.79206897132712,
+        "upper_asym": 0.41803165073436827,
+        "stride_length": 30.332184954624548,
+        "walking_speed": 15.166092477312274,
+        "arm_swing": 17.265984402798825,
+        "step_variability": 23.38576233276462,
+        "cadence": 0.21428571428571427,
+        "height_ratio": 2.505248284214776
+      },
+      "sessions": []
+    },
+    "P012": {
+      "name": "yomna",
+      "signature": {
+        "h_w_ratio": 1.6182377246112032,
+        "fill_ratio": 0.5646625699446606,
+        "torso_w": 121.46639834603194,
+        "legs_w": 137.5608810757227,
+        "upper_asym": 0.3769315197778807,
+        "stride_length": 32.338306071478094,
+        "walking_speed": 16.169153035739047,
+        "arm_swing": 65.95028223802423,
+        "step_variability": 38.62775439500752,
+        "cadence": 0.1276595744680851,
+        "height_ratio": 1.3235299138004608
+      },
+      "sessions": []
+    },
+    "P013": {
+      "name": "testHomme",
+      "signature": {
+        "h_w_ratio": 1.785327823118615,
+        "fill_ratio": 0.5164590231022307,
+        "torso_w": 45.86148750874048,
+        "legs_w": 42.355670616347155,
+        "upper_asym": 0.4491867168912287,
+        "stride_length": 32.112320030798635,
+        "walking_speed": 16.056160015399318,
+        "arm_swing": 21.095613595765755,
+        "step_variability": 18.112780351037948,
+        "cadence": 0.21428571428571427,
+        "height_ratio": 1.674406865219586
+      },
+      "sessions": []
+    },
+    "P014": {
+      "name": "parkinsonPatient",
+      "signature": {
+        "h_w_ratio": 2.094135990346216,
+        "fill_ratio": 0.513538580649984,
+        "torso_w": 37.47467925563904,
+        "legs_w": 37.29775929977278,
+        "upper_asym": 0.42026289301556474,
+        "stride_length": 4.633394345738093,
+        "walking_speed": 2.3166971728690466,
+        "arm_swing": 13.20094112883296,
+        "step_variability": 3.094379719784736,
+        "cadence": 0.23030303030303031,
+        "height_ratio": 2.182127447726518
+      },
+      "sessions": []
+    },
+    "P015": {
+      "name": "normalWalk",
+      "signature": {
+        "h_w_ratio": 2.6737531695867394,
+        "fill_ratio": 0.5100504773292223,
+        "torso_w": 70.51045762462621,
+        "legs_w": 48.53122615708579,
+        "upper_asym": 0.3549616615991793,
+        "stride_length": 5.797969484926999,
+        "walking_speed": 2.8989847424634996,
+        "arm_swing": 13.3042365475319,
+        "step_variability": 1.678215156441743,
+        "cadence": 0.15384615384615385,
+        "height_ratio": 2.636304909560723
+      },
+      "sessions": []
+    },
+    "P016": {
+      "name": "manWalking",
+      "signature": {
+        "shoulder_w": 0.022354340950214692,
+        "hip_w": 0.013783838366528868,
+        "body_h": 0.29205700655326317,
+        "h_w_ratio": 15.98050333045371,
+        "asym": 0.21596272309745151,
+        "stride_length": 28.399579432079733,
+        "walking_speed": 4.176241295877844,
+        "arm_swing": 79.36348422857417,
+        "step_variability": 19.572270242557558,
+        "cadence": 0.16279069767441862,
+        "height_ratio": 6.483383157325004
+      },
+      "sessions": []
+    },
+    "P017": {
+      "name": "parkinsonPerson",
+      "signature": {
+        "shoulder_w": 0.04581246624015028,
+        "hip_w": 0.028564986333015668,
+        "body_h": 0.6301197716844267,
+        "h_w_ratio": 26.526642399254175,
+        "asym": 0.057802177790200256,
+        "stride_length": 15.560401591671361,
+        "walking_speed": 0.8802142239256994,
+        "arm_swing": 102.36907874086602,
+        "step_variability": 10.733901930672598,
+        "cadence": 0.13712374581939799,
+        "height_ratio": 26.05152020020556
+      },
+      "sessions": []
+    },
+    "P018": {
+      "name": "John Smith",
+      "signature": {
+        "shoulder_w": 0.08930887163402088,
+        "hip_w": 0.052454365717531995,
+        "body_h": 0.6627993044274828,
+        "h_w_ratio": 4.175097794872781,
+        "asym": 0.030117407477652732,
+        "stride_length": 29.886817902565088,
+        "walking_speed": 0.2266963322957357,
+        "arm_swing": 89.2025957304932,
+        "step_variability": 0.98488309992243,
+        "cadence": 0.1935483870967742,
+        "height_ratio": 3.6413384875166006
+      },
+      "sessions": []
+    },
+    "P019": {
+      "name": "GirlNormalWalk",
+      "signature": {
+        "shoulder_w": 0.03836157456264705,
+        "hip_w": 0.027655244032141164,
+        "body_h": 0.8255802929166515,
+        "h_w_ratio": 25.27909860046877,
+        "asym": 0.07538076071312291,
+        "stride_length": 80.20075225678713,
+        "walking_speed": 8.364778394284455,
+        "arm_swing": 113.8201857683544,
+        "step_variability": 41.005546241621566,
+        "cadence": 0.16666666666666666,
+        "height_ratio": 21.34789121736053
+      },
+      "sessions": []
+    },
+    "P020": {
+      "name": "John Smith",
+      "signature": {
+        "shoulder_w": 0.08847726260571252,
+        "hip_w": 0.05230367939735476,
+        "body_h": 0.6618886350808738,
+        "h_w_ratio": 4.209242861537464,
+        "asym": 0.030597232060768437,
+        "stride_length": 29.70073819729994,
+        "walking_speed": 0.47765175501505536,
+        "arm_swing": 89.46799911140519,
+        "step_variability": 1.1185190344825795,
+        "cadence": 0.15384615384615385,
+        "height_ratio": 3.674434350673552
+      },
+      "sessions": []
+    },
+    "P021": {
+      "name": "Alice Abernathy",
+      "signature": {
+        "shoulder_w": 0.052524604529002296,
+        "hip_w": 0.029570383951549938,
+        "body_h": 0.8226373026905862,
+        "h_w_ratio": 16.92401285923336,
+        "asym": 0.08566909832181535,
+        "stride_length": 57.32505403821572,
+        "walking_speed": 8.091664747758346,
+        "arm_swing": 111.02510735024708,
+        "step_variability": 37.95520662815404,
+        "cadence": 0.16666666666666666,
+        "height_ratio": 14.634188225229806
+      },
+      "sessions": []
+    }
+  },
+  "p002": {
+    "name": "normalWalk",
+    "signature": {
+      "shoulder_w": 0.0538407997969212,
+      "hip_w": 0.028727155330736776,
+      "body_h": 0.8210572072988715
+    },
+    "created": "2026-04-11T15:26:16.840345"
+  }
+}

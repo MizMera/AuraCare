@@ -1,0 +1,144 @@
+import os
+from pathlib import Path
+from datetime import timedelta
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_SQLITE_DB_FILENAME = 'db_gait.sqlite3' if (BASE_DIR / 'db_gait.sqlite3').exists() else 'db.sqlite3'
+SQLITE_DB_FILENAME = os.environ.get('AURACARE_DB_FILENAME', DEFAULT_SQLITE_DB_FILENAME)
+
+SECRET_KEY = 'django-insecure-silverguard-placeholder-key'
+DEBUG = True
+ALLOWED_HOSTS = ['*']
+
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    
+    # Third party
+    'rest_framework',
+    'rest_framework_simplejwt',
+    'corsheaders',
+
+    # Local apps
+    'core',
+]
+
+MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+ROOT_URLCONF = 'backend.urls'
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+
+WSGI_APPLICATION = 'backend.wsgi.application'
+
+# Database
+# Currently using SQLite for rapid prototyping. 
+# You can uncomment the PostgreSQL dict below when you transition to production.
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / SQLITE_DB_FILENAME,
+    }
+}
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'silverguard',
+#         'USER': 'postgres',
+#         'PASSWORD': 'supersecretpassword',
+#         'HOST': 'localhost',
+#         'PORT': '5432',
+#     }
+# }
+
+AUTH_PASSWORD_VALIDATORS = []
+
+LANGUAGE_CODE = 'en-us'
+TIME_ZONE = 'Africa/Tunis'
+USE_I18N = True
+USE_TZ = True
+
+STATIC_URL = 'static/'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Set custom user model
+AUTH_USER_MODEL = 'core.CustomUser'
+
+AUTHENTICATION_BACKENDS = [
+    'core.backends.EmailBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+# Django REST Framework Settings
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    )
+}
+
+# SimpleJWT Settings
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': True,
+}
+
+# Celery Configuration (Redis)
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+
+from corsheaders.defaults import default_headers
+
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'x-api-key',
+]
+
+# Fall detection (YOLO pose + LSTM). Weights: backend/models/fall_detection_model.pth
+FALL_DETECTION = {
+    'LSTM_WEIGHTS': BASE_DIR / 'models' / 'fall_detection_model.pth',
+    'YOLO_POSE': 'yolo11n-pose.pt',
+    'FRAME_WIDTH': 640,
+    'FRAME_HEIGHT': 480,
+    'SEQUENCE_LENGTH': 25,
+    'LSTM_HIDDEN_SIZE': 256,
+    'LSTM_NUM_LAYERS': 2,
+    'NUM_CLASSES': 2,
+    'FALL_CLASS_INDEX': 1,
+}
