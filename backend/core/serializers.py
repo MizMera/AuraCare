@@ -1,7 +1,10 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth.password_validation import validate_password
-from .fall_incident import record_fall_incident
+try:
+    from .fall_incident import record_fall_incident
+except ImportError:
+    record_fall_incident = None
 from .models import Device, HealthMetric, Incident, Resident, Zone, CustomUser
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -69,6 +72,8 @@ class FallIncidentIngestSerializer(serializers.Serializer):
         return value
 
     def create(self, validated_data):
+        if record_fall_incident is None:
+            raise serializers.ValidationError('Fall incident service is not available.')
         return record_fall_incident(
             validated_data['device_id'],
             validated_data.get('description', ''),

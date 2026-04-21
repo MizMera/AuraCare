@@ -121,9 +121,9 @@ CELERY_TIMEZONE = TIME_ZONE
 
 CORS_ALLOW_ALL_ORIGINS = True
 
-# Fall detection (YOLO pose + LSTM). Weights: backend/models/fall_detection_model.pth
+# Fall detection (YOLO pose + LSTM). Weights live under backend/models/ by default.
 FALL_DETECTION = {
-    'LSTM_WEIGHTS': BASE_DIR / 'models' / 'fall_detection_model.pth',
+    'LSTM_WEIGHTS': BASE_DIR / 'models' / 'best_model.pth',
     'YOLO_POSE': 'yolo11n-pose.pt',
     'FRAME_WIDTH': 640,
     'FRAME_HEIGHT': 480,
