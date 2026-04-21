@@ -484,3 +484,9 @@ button {
   color: var(--moonstone);
   font-weight: 600;
 }
+
+/* Live stream pulse animation */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}

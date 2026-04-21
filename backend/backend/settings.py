@@ -3,6 +3,8 @@ from pathlib import Path
 from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_SQLITE_DB_FILENAME = 'db_gait.sqlite3' if (BASE_DIR / 'db_gait.sqlite3').exists() else 'db.sqlite3'
+SQLITE_DB_FILENAME = os.environ.get('AURACARE_DB_FILENAME', DEFAULT_SQLITE_DB_FILENAME)
 
 SECRET_KEY = 'django-insecure-silverguard-placeholder-key'
 DEBUG = True
@@ -62,7 +64,7 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': BASE_DIR / SQLITE_DB_FILENAME,
     }
 }
 
@@ -80,11 +82,13 @@ DATABASES = {
 AUTH_PASSWORD_VALIDATORS = []
 
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Africa/Tunis'
 USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -119,7 +123,12 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
+from corsheaders.defaults import default_headers
+
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'x-api-key',
+]
 
 # Fall detection (YOLO pose + LSTM). Weights live under backend/models/ by default.
 FALL_DETECTION = {
