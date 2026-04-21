@@ -4,9 +4,10 @@ import axios from 'axios';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import {
   LogOut, Activity, AlertCircle, ShieldAlert, Users, HeartPulse, Video,
-  Eye, Brain, UtensilsCrossed, Clock3, Plus, Pencil, Trash2, CheckCircle2,
+  Eye, Brain, UtensilsCrossed, Clock3, Plus, Pencil, Trash2, CheckCircle2, Sparkles,
 } from 'lucide-react';
 import SocialInteraction from './SocialInteraction';
+import WanderingDetection from './WanderingDetection';
 import NotificationBell from '../components/NotificationBell';
 import GaitAnalysisPanel from '../components/GaitAnalysisPanel';
 import { mealService } from '../services/mealService';
@@ -692,6 +693,7 @@ function StaffDashboard({ token, onLogout, role }) {
             <li><button type="button" onClick={() => setStaffSection('gait')} style={navBtn(staffSection === 'gait')}><Activity size={18} /> Gait Analysis</button></li>
             <li><button type="button" onClick={() => setStaffSection('livefeed')} style={navBtn(staffSection === 'livefeed')}><Video size={18} /> Live Feed</button></li>
             <li><button type="button" onClick={() => setStaffSection('combi')} style={navBtn(staffSection === 'combi')}><Brain size={18} /> Social Interaction</button></li>
+            <li><button type="button" onClick={() => setStaffSection('wandering')} style={navBtn(staffSection === 'wandering')}><Sparkles size={18} /> Wandering Detection</button></li>
           </ul>
         </nav>
         <div style={{ padding: '2rem' }}>
@@ -714,6 +716,10 @@ function StaffDashboard({ token, onLogout, role }) {
               description="Sarra's combined social-isolation model is now reachable from the caregiver sidebar."
             />
           </div>
+        ) : staffSection === 'wandering' ? (
+          <div style={{ margin: '-3rem' }}>
+            <WanderingDetection token={token} onLogout={onLogout} />
+          </div>
         ) : (
           <div>
             <header style={{ marginBottom: '3rem' }}>
@@ -722,6 +728,7 @@ function StaffDashboard({ token, onLogout, role }) {
                 {staffSection === 'livefeed' ? 'Monitor live aggression detection feeds' :
                   staffSection === 'gait' ? 'Review Yomna’s gait-analysis results and launch new recordings' :
                   staffSection === 'meals' ? 'Coordinate Meriem’s meal schedule and related alerts' :
+                    staffSection === 'wandering' ? 'Review wandering risk scores, trajectories, and generated reports' :
                     staffSection === 'incidents' ? 'View all facility incidents and history' :
                       'Monitor all assigned residents for your shift'}
               </p>
@@ -798,6 +805,8 @@ function StaffDashboard({ token, onLogout, role }) {
                   <div><span style={{ fontSize: '0.8rem', color: 'var(--text-light)' }}>Auto-Report</span><p style={{ margin: 0, fontWeight: 600, color: '#059669' }}>Enabled (30s cooldown)</p></div>
                 </div>
               </div>
+            ) : staffSection === 'wandering' ? (
+              <WanderingDetection token={token} onLogout={onLogout} />
             ) : staffSection === 'incidents' ? (
               <div style={sectionCardStyle}>
                 <h3 style={{ color: 'var(--midnight-green)', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

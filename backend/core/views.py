@@ -32,10 +32,18 @@ from .serializers import (
     CustomTokenObtainPairSerializer
 )
 from .meal_monitor import get_meal_attendance_engine, analyse_meal_frame_bytes
+from .modelayoub_pipeline import get_artifacts as get_modelayoub_artifacts
+from .modelayoub_pipeline import get_status as get_modelayoub_status
+from .modelayoub_pipeline import launch_pipeline as launch_modelayoub_pipeline
+from .modelayoub_pipeline import stop_pipeline as stop_modelayoub_pipeline
 from .utils import get_current_person_count
 from .detection import process_frame
 from .camera_arbiter import camera_arbiter
 import cv2
+
+
+def _modelayoub_access_allowed(user):
+    return user.role in [CustomUser.RoleChoices.ADMIN, CustomUser.RoleChoices.CAREGIVER]
 
 def _residents_for_user(user):
     if user.role == CustomUser.RoleChoices.FAMILY:
@@ -216,6 +224,208 @@ class MobileFacilityIncidentsView(views.APIView):
 
         incidents = Incident.objects.select_related('zone').order_by('-timestamp')[:30]
         return Response(IncidentSerializer(incidents, many=True).data, status=status.HTTP_200_OK)
+
+
+class ModelAyoubLaunchView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        if not _modelayoub_access_allowed(request.user):
+            return Response(
+                {'error': 'Only caregiver/admin users can launch the modelayoub pipeline.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        input_mode = str(request.data.get('input_mode', 'webcam')).strip().lower()
+        video_input_path = request.data.get('video_input_path')
+        webcam_index = int(request.data.get('webcam_index', 0) or 0)
+
+        try:
+            status_payload = launch_modelayoub_pipeline(
+                requested_by=request.user.username,
+                input_mode=input_mode,
+                video_input_path=video_input_path,
+                webcam_index=webcam_index,
+            )
+        except FileNotFoundError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except ValueError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response({'error': f'Unable to launch modelayoub pipeline: {exc}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        if status_payload.get('running'):
+            return Response(status_payload, status=status.HTTP_202_ACCEPTED)
+        return Response(status_payload, status=status.HTTP_200_OK)
+
+
+class ModelAyoubUploadView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    parser_classes = [parsers.MultiPartParser]
+
+    def post(self, request, *args, **kwargs):
+        if not _modelayoub_access_allowed(request.user):
+            return Response(
+                {'error': 'Only caregiver/admin users can upload videos for the modelayoub pipeline.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        existing_status = get_modelayoub_status()
+        if existing_status.get('running'):
+            return Response(
+                {'error': 'The wandering pipeline is already running. Stop or wait for the current run to finish.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        blob = request.FILES.get('video_file') or request.FILES.get('blob')
+        if blob is None:
+            return Response({'error': 'No video file was uploaded.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        upload_dir = Path(settings.MEDIA_ROOT) / 'uploads' / 'modelayoub'
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        safe_name = f'{timestamp}_{Path(blob.name).name}'
+        video_path = upload_dir / safe_name
+
+        with video_path.open('wb') as handle:
+            for chunk in blob.chunks():
+                handle.write(chunk)
+
+        try:
+            status_payload = launch_modelayoub_pipeline(
+                requested_by=request.user.username,
+                input_mode='upload',
+                video_input_path=str(video_path),
+            )
+        except Exception as exc:
+            return Response({'error': f'Unable to start wandering analysis: {exc}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({
+            'ok': True,
+            'filename': blob.name,
+            'video_path': str(video_path),
+            'status': status_payload,
+        }, status=status.HTTP_201_CREATED)
+
+
+class ModelAyoubStatusView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        if not _modelayoub_access_allowed(request.user):
+            return Response(
+                {'error': 'Only caregiver/admin users can view the modelayoub pipeline status.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        return Response(get_modelayoub_status(), status=status.HTTP_200_OK)
+
+
+class ModelAyoubArtifactsView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        if not _modelayoub_access_allowed(request.user):
+            return Response(
+                {'error': 'Only caregiver/admin users can view modelayoub artifacts.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        return Response(get_modelayoub_artifacts(), status=status.HTTP_200_OK)
+
+
+class ModelAyoubStopView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        if not _modelayoub_access_allowed(request.user):
+            return Response(
+                {'error': 'Only caregiver/admin users can stop the modelayoub pipeline.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            status_payload = stop_modelayoub_pipeline(requested_by=request.user.username)
+        except Exception as exc:
+            return Response({'error': f'Unable to stop modelayoub pipeline: {exc}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response(status_payload, status=status.HTTP_200_OK)
+
+
+class ModelAyoubStreamView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        if not _modelayoub_access_allowed(request.user):
+            return Response(
+                {'error': 'Only caregiver/admin users can stream the modelayoub video.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        from .modelayoub_pipeline import get_output_dir
+
+        video_path = Path(get_output_dir()) / 'tracking_output.mp4'
+        if not video_path.exists():
+            return Response(
+                {'error': 'Video file not available. Pipeline may not have generated output yet.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            file_size = video_path.stat().st_size
+        except OSError:
+            return Response(
+                {'error': 'Cannot access video file.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        # Handle HTTP range requests for streaming
+        range_header = request.META.get('HTTP_RANGE', '')
+        range_start = 0
+        range_end = file_size - 1
+
+        if range_header:
+            try:
+                range_match = __import__('re').match(r'bytes=(\d+)-(\d*)', range_header)
+                if range_match:
+                    range_start = int(range_match.group(1))
+                    if range_match.group(2):
+                        range_end = int(range_match.group(2))
+            except (ValueError, AttributeError):
+                pass
+
+        def file_iterator(file_path, start, end, chunk_size=8192):
+            with open(file_path, 'rb') as f:
+                f.seek(start)
+                remaining = end - start + 1
+                while remaining > 0:
+                    read_size = min(chunk_size, remaining)
+                    chunk = f.read(read_size)
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+
+        response = StreamingHttpResponse(
+            file_iterator(video_path, range_start, range_end),
+            content_type='video/mp4',
+            status=206 if range_header else 200,
+        )
+        response['Accept-Ranges'] = 'bytes'
+        response['Content-Length'] = str(range_end - range_start + 1)
+
+        if range_header:
+            response['Content-Range'] = f'bytes {range_start}-{range_end}/{file_size}'
+        else:
+            response['Content-Length'] = str(file_size)
+
+        return response
 
 
 def _serialize_gait_observation(observation):
@@ -913,7 +1123,9 @@ class IsolationSessionDetailView(views.APIView):
 # -----------------------------------------------------------------------------
 # LIVE AGGRESSION STREAM
 # -----------------------------------------------------------------------------
-from .aggression_stream import get_engine
+def _get_aggression_engine():
+    from .aggression_stream import get_engine
+    return get_engine
 
 class AggressionStreamStartView(views.APIView):
     """
@@ -925,7 +1137,7 @@ class AggressionStreamStartView(views.APIView):
     def post(self, request):
         camera = request.data.get('camera', 0)
         device_id = request.data.get('device_id', 'CAM_01')
-        engine = get_engine(camera_idx=camera, device_id=device_id)
+        engine = _get_aggression_engine()(camera_idx=camera, device_id=device_id)
         started = engine.start()
         if not started:
             return Response({"status": "error", **engine.status}, status=status.HTTP_409_CONFLICT)
@@ -937,7 +1149,7 @@ class AggressionStreamStopView(views.APIView):
     permission_classes = [HasAPIKey]
 
     def post(self, request):
-        engine = get_engine()
+        engine = _get_aggression_engine()()
         engine.stop()
         return Response({"status": "stopped"}, status=status.HTTP_200_OK)
 
@@ -947,7 +1159,7 @@ class AggressionStreamStatusView(views.APIView):
     permission_classes = []
 
     def get(self, request):
-        engine = get_engine()
+        engine = _get_aggression_engine()()
         return Response(engine.status, status=status.HTTP_200_OK)
 
 
@@ -956,7 +1168,7 @@ def aggression_stream_feed(request):
     MJPEG video feed endpoint.
     Usage: <img src="http://localhost:8000/api/stream/aggression/feed/" />
     """
-    engine = get_engine()
+    engine = _get_aggression_engine()()
     if not engine._running:
         return JsonResponse({"error": "Stream not started. POST to /api/stream/aggression/start/ first."}, status=503)
     return StreamingHttpResponse(
