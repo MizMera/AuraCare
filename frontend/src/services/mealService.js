@@ -32,8 +32,13 @@ export const mealService = {
 };
 
 export const notificationService = {
-  getAll: async (token, unreadOnly = false) => {
-    const endpoint = unreadOnly ? `${API_BASE}/notifications/?unread=true` : `${API_BASE}/notifications/`;
+  getAll: async (token, options = {}) => {
+    const params = new URLSearchParams();
+    if (options.unreadOnly) params.set('unread', 'true');
+    if (options.incidentOnly) params.set('incident_only', 'true');
+    if (options.todayOnly) params.set('today_only', 'true');
+    const query = params.toString();
+    const endpoint = query ? `${API_BASE}/notifications/?${query}` : `${API_BASE}/notifications/`;
     const response = await axios.get(endpoint, buildHeaders(token));
     return response.data;
   },

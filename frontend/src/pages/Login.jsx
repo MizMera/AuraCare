@@ -1,5 +1,4 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Activity } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios';
 

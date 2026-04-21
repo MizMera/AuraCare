@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import { Activity } from 'lucide-react';
 
 export default function Header() {
   return (

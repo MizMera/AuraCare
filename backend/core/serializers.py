@@ -3,6 +3,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth.password_validation import validate_password
 from .fall_incident import record_fall_incident
 from .aggression_incident import record_aggression_incident
+from .utils import create_notifications_for_incident
 from .models import Device, HealthMetric, Incident, Resident, Zone, CustomUser, MealTime, Notification
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -54,6 +55,11 @@ class IncidentIngestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Incident
         fields = ['resident', 'zone', 'type', 'severity', 'description']
+
+    def create(self, validated_data):
+        incident = super().create(validated_data)
+        create_notifications_for_incident(incident)
+        return incident
 
 
 class FallIncidentIngestSerializer(serializers.Serializer):
@@ -146,6 +152,8 @@ class MealTimeSerializer(serializers.ModelSerializer):
 class NotificationSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.username', read_only=True)
     incident_type = serializers.CharField(source='incident.type', read_only=True, allow_null=True)
+    incident_severity = serializers.CharField(source='incident.severity', read_only=True, allow_null=True)
+    incident_severity_display = serializers.CharField(source='incident.get_severity_display', read_only=True, allow_null=True)
     meal_name = serializers.CharField(source='meal.name', read_only=True, allow_null=True)
 
     class Meta:
@@ -153,5 +161,5 @@ class NotificationSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'message', 'notification_type', 'status', 'is_read', 'created_at',
             'user', 'user_name', 'incident', 'incident_type', 'meal', 'meal_name',
-            'resident',
+            'resident', 'incident_severity', 'incident_severity_display',
         ]

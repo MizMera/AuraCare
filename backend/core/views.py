@@ -36,7 +36,7 @@ from .modelayoub_pipeline import get_artifacts as get_modelayoub_artifacts
 from .modelayoub_pipeline import get_status as get_modelayoub_status
 from .modelayoub_pipeline import launch_pipeline as launch_modelayoub_pipeline
 from .modelayoub_pipeline import stop_pipeline as stop_modelayoub_pipeline
-from .utils import get_current_person_count
+from .utils import get_current_person_count, create_notifications_for_incident
 from .detection import process_frame
 from .camera_arbiter import camera_arbiter
 import cv2
@@ -508,13 +508,14 @@ class GaitIngestView(views.APIView):
             ).count()
             if recent_abnormal_count >= 3:
                 alert_triggered = True
-                Incident.objects.create(
+                incident = Incident.objects.create(
                     resident=resident,
                     zone=zone,
                     type=Incident.IncidentTypeChoices.FALL,
                     severity=Incident.SeverityChoices.HIGH,
                     description=f'Abnormal gait detected. Confidence: {confidence:.0f}%',
                 )
+                create_notifications_for_incident(incident)
 
         observation = GaitObservation.objects.create(
             resident=resident,
@@ -686,10 +687,42 @@ class NotificationListView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
+        incident_only = request.query_params.get('incident_only', 'false').lower() == 'true'
+        today_only = request.query_params.get('today_only', 'false').lower() == 'true'
         unread_only = request.query_params.get('unread', 'false').lower() == 'true'
+
+        if incident_only and today_only:
+            todays_incidents = Incident.objects.filter(timestamp__date=timezone.localdate())
+            existing_incident_ids = set(
+                Notification.objects.filter(
+                    user=request.user,
+                    notification_type=Notification.NotificationTypeChoices.INCIDENT,
+                    incident__isnull=False,
+                ).values_list('incident_id', flat=True)
+            )
+            for incident in todays_incidents:
+                if incident.id in existing_incident_ids:
+                    continue
+                incident_label = incident.get_type_display()
+                zone_name = incident.zone.name if incident.zone else 'Unknown zone'
+                description = incident.description or f'{incident_label} detected.'
+                Notification.objects.create(
+                    message=f"{incident_label} in {zone_name}: {description}",
+                    notification_type=Notification.NotificationTypeChoices.INCIDENT,
+                    status=Notification.StatusChoices.SENT,
+                    user=request.user,
+                    incident=incident,
+                    meal=incident.meal,
+                    resident=incident.resident,
+                )
+
+        notifications = Notification.objects.filter(user=request.user).order_by('-created_at')
         if unread_only:
             notifications = notifications.filter(is_read=False)
+        if incident_only:
+            notifications = notifications.filter(notification_type=Notification.NotificationTypeChoices.INCIDENT)
+        if today_only:
+            notifications = notifications.filter(created_at__date=timezone.localdate())
         return Response(NotificationSerializer(notifications, many=True).data, status=status.HTTP_200_OK)
 
 

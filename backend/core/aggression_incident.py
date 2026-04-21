@@ -1,4 +1,5 @@
 from .models import Device, Incident
+from .utils import create_notifications_for_incident
 
 def record_aggression_incident(device_id, description=''):
     try:
@@ -13,4 +14,5 @@ def record_aggression_incident(device_id, description=''):
         severity=Incident.SeverityChoices.HIGH,
         description=description
     )
+    create_notifications_for_incident(incident)
     return incident

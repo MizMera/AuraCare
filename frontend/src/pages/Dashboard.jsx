@@ -30,7 +30,22 @@ const navBtn = (active) => ({
   backgroundColor: active ? 'rgba(255,255,255,0.15)' : 'transparent',
   color: active ? 'var(--moonstone)' : 'rgba(255,255,255,0.7)',
   fontWeight: active ? 700 : 400,
+  transition: 'transform 0.18s ease, background-color 0.18s ease, color 0.18s ease',
 });
+const sidebarBtnHoverHandlers = {
+  onMouseEnter: (event) => {
+    event.currentTarget.style.transform = 'translateX(2px)';
+    if (event.currentTarget.style.backgroundColor === 'transparent') {
+      event.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)';
+    }
+  },
+  onMouseLeave: (event) => {
+    event.currentTarget.style.transform = 'translateX(0)';
+    if (event.currentTarget.style.fontWeight !== '700') {
+      event.currentTarget.style.backgroundColor = 'transparent';
+    }
+  },
+};
 
 const INCIDENT_COLORS = {
   FALL: { bg: '#FEE2E2', border: '#DC2626', text: '#7F1D1D', badge: '#EF4444' },
@@ -64,6 +79,31 @@ const formLabelStyle = {
   fontWeight: 700,
   color: 'var(--midnight-green)',
   marginBottom: '0.45rem',
+};
+const logoutDockStyle = {
+  position: 'sticky',
+  bottom: '1rem',
+  margin: '1rem',
+  padding: 0,
+  borderRadius: 0,
+  backgroundColor: 'transparent',
+  backdropFilter: 'none',
+};
+const logoutBtnStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '0.5rem',
+  color: 'white',
+  width: '100%',
+  background: 'rgba(255,255,255,0.06)',
+  border: '1px solid rgba(255,255,255,0.22)',
+  borderRadius: '12px',
+  padding: '0.7rem 0.9rem',
+  cursor: 'pointer',
+  fontSize: '0.95rem',
+  fontWeight: 700,
+  transition: 'transform 0.18s ease, background-color 0.18s ease',
 };
 
 function getIncidentColor(type) {
@@ -678,7 +718,7 @@ function StaffDashboard({ token, onLogout, role }) {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--alice-blue)' }}>
-      <aside style={{ width: '260px', backgroundColor: 'var(--midnight-green)', color: 'white', display: 'flex', flexDirection: 'column' }}>
+      <aside style={{ width: '260px', backgroundColor: 'var(--midnight-green)', color: 'white', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh', overflowY: 'auto' }}>
         <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
           <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', color: 'white', fontSize: '1.5rem', fontWeight: 'bold' }}>
             <img src="/LOGO_AURACARE.png" alt="AuraCare Logo" style={{ height: '40px' }} />
@@ -687,20 +727,28 @@ function StaffDashboard({ token, onLogout, role }) {
         </div>
         <nav style={{ flex: 1, padding: '1rem' }}>
           <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', listStyle: 'none', padding: 0 }}>
-            <li><button type="button" onClick={() => setStaffSection('residents')} style={navBtn(staffSection === 'residents')}><Users size={18} /> Assigned Residents</button></li>
-            <li><button type="button" onClick={() => setStaffSection('incidents')} style={navBtn(staffSection === 'incidents')}><ShieldAlert size={18} /> Facility Incidents</button></li>
-            <li><button type="button" onClick={() => setStaffSection('meals')} style={navBtn(staffSection === 'meals')}><UtensilsCrossed size={18} /> Meals & Alerts</button></li>
-            <li><button type="button" onClick={() => setStaffSection('gait')} style={navBtn(staffSection === 'gait')}><Activity size={18} /> Gait Analysis</button></li>
-            <li><button type="button" onClick={() => setStaffSection('livefeed')} style={navBtn(staffSection === 'livefeed')}><Video size={18} /> Live Feed</button></li>
-            <li><button type="button" onClick={() => setStaffSection('combi')} style={navBtn(staffSection === 'combi')}><Brain size={18} /> Social Interaction</button></li>
-            <li><button type="button" onClick={() => setStaffSection('wandering')} style={navBtn(staffSection === 'wandering')}><Sparkles size={18} /> Wandering Detection</button></li>
+            <li><button type="button" onClick={() => setStaffSection('residents')} style={navBtn(staffSection === 'residents')} {...sidebarBtnHoverHandlers}><Users size={18} /> Assigned Residents</button></li>
+            <li><button type="button" onClick={() => setStaffSection('incidents')} style={navBtn(staffSection === 'incidents')} {...sidebarBtnHoverHandlers}><ShieldAlert size={18} /> Facility Incidents</button></li>
+            <li><button type="button" onClick={() => setStaffSection('meals')} style={navBtn(staffSection === 'meals')} {...sidebarBtnHoverHandlers}><UtensilsCrossed size={18} /> Meals & Alerts</button></li>
+            <li><button type="button" onClick={() => setStaffSection('gait')} style={navBtn(staffSection === 'gait')} {...sidebarBtnHoverHandlers}><Activity size={18} /> Gait Analysis</button></li>
+            <li><button type="button" onClick={() => setStaffSection('livefeed')} style={navBtn(staffSection === 'livefeed')} {...sidebarBtnHoverHandlers}><Video size={18} /> Live Feed</button></li>
+            <li><button type="button" onClick={() => setStaffSection('combi')} style={navBtn(staffSection === 'combi')} {...sidebarBtnHoverHandlers}><Brain size={18} /> Social Interaction</button></li>
+            <li><button type="button" onClick={() => setStaffSection('wandering')} style={navBtn(staffSection === 'wandering')} {...sidebarBtnHoverHandlers}><Sparkles size={18} /> Wandering Detection</button></li>
           </ul>
         </nav>
-        <div style={{ padding: '2rem' }}>
-          <div style={{ marginBottom: '1rem', padding: '0.85rem', borderRadius: '16px', backgroundColor: 'rgba(255,255,255,0.08)' }}>
-            <NotificationBell token={token} />
-          </div>
-          <button onClick={onLogout} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'rgba(255,255,255,0.7)', width: '100%', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem' }}>
+        <div style={logoutDockStyle}>
+          <button
+            onClick={onLogout}
+            style={logoutBtnStyle}
+            onMouseEnter={(event) => {
+              event.currentTarget.style.transform = 'translateY(-1px)';
+              event.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.14)';
+            }}
+            onMouseLeave={(event) => {
+              event.currentTarget.style.transform = 'translateY(0)';
+              event.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)';
+            }}
+          >
             <LogOut size={18} /> Sign Out
           </button>
         </div>
@@ -722,16 +770,19 @@ function StaffDashboard({ token, onLogout, role }) {
           </div>
         ) : (
           <div>
-            <header style={{ marginBottom: '3rem' }}>
-              <h1 style={{ color: 'var(--midnight-green)', margin: 0 }}>Caregiver Dashboard</h1>
-              <p style={{ color: 'var(--text-light)', margin: 0 }}>
-                {staffSection === 'livefeed' ? 'Monitor live aggression detection feeds' :
-                  staffSection === 'gait' ? 'Review Yomna’s gait-analysis results and launch new recordings' :
-                  staffSection === 'meals' ? 'Coordinate Meriem’s meal schedule and related alerts' :
-                    staffSection === 'wandering' ? 'Review wandering risk scores, trajectories, and generated reports' :
-                    staffSection === 'incidents' ? 'View all facility incidents and history' :
-                      'Monitor all assigned residents for your shift'}
-              </p>
+            <header style={{ marginBottom: '3rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+              <div>
+                <h1 style={{ color: 'var(--midnight-green)', margin: 0 }}>Caregiver Dashboard</h1>
+                <p style={{ color: 'var(--text-light)', margin: 0 }}>
+                  {staffSection === 'livefeed' ? 'Monitor live aggression detection feeds' :
+                    staffSection === 'gait' ? 'Review Yomna’s gait-analysis results and launch new recordings' :
+                    staffSection === 'meals' ? 'Coordinate Meriem’s meal schedule and related alerts' :
+                      staffSection === 'wandering' ? 'Review wandering risk scores, trajectories, and generated reports' :
+                      staffSection === 'incidents' ? 'View all facility incidents and history' :
+                        'Monitor all assigned residents for your shift'}
+                </p>
+              </div>
+              <NotificationBell token={token} compact dropdownAlign="top-right" />
             </header>
 
             {staffSection === 'gait' ? (
@@ -934,7 +985,7 @@ function FamilyDashboard({ token, onLogout }) {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--alice-blue)' }}>
-      <aside style={{ width: '260px', backgroundColor: 'var(--midnight-green)', color: 'white', display: 'flex', flexDirection: 'column' }}>
+      <aside style={{ width: '260px', backgroundColor: 'var(--midnight-green)', color: 'white', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh', overflowY: 'auto' }}>
         <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
           <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', color: 'white', fontSize: '1.5rem', fontWeight: 'bold' }}>
             <img src="/LOGO_AURACARE.png" alt="AuraCare Logo" style={{ height: '40px' }} />
@@ -943,13 +994,24 @@ function FamilyDashboard({ token, onLogout }) {
         </div>
         <nav style={{ flex: 1, padding: '1rem' }}>
           <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', listStyle: 'none', padding: 0 }}>
-            <li><button onClick={() => setActivePage('overview')} style={navBtn(activePage === 'overview')}><Activity size={18} /> Overview</button></li>
-            <li><button onClick={() => setActivePage('incidents')} style={navBtn(activePage === 'incidents')}><ShieldAlert size={18} /> Incident Logs</button></li>
-            <li><button onClick={() => setActivePage('social')} style={navBtn(activePage === 'social')}><Brain size={18} /> Social Interaction</button></li>
+            <li><button onClick={() => setActivePage('overview')} style={navBtn(activePage === 'overview')} {...sidebarBtnHoverHandlers}><Activity size={18} /> Overview</button></li>
+            <li><button onClick={() => setActivePage('incidents')} style={navBtn(activePage === 'incidents')} {...sidebarBtnHoverHandlers}><ShieldAlert size={18} /> Incident Logs</button></li>
+            <li><button onClick={() => setActivePage('social')} style={navBtn(activePage === 'social')} {...sidebarBtnHoverHandlers}><Brain size={18} /> Social Interaction</button></li>
           </ul>
         </nav>
-        <div style={{ padding: '2rem' }}>
-          <button onClick={onLogout} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'rgba(255,255,255,0.7)', width: '100%', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem' }}>
+        <div style={logoutDockStyle}>
+          <button
+            onClick={onLogout}
+            style={logoutBtnStyle}
+            onMouseEnter={(event) => {
+              event.currentTarget.style.transform = 'translateY(-1px)';
+              event.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.14)';
+            }}
+            onMouseLeave={(event) => {
+              event.currentTarget.style.transform = 'translateY(0)';
+              event.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)';
+            }}
+          >
             <LogOut size={18} /> Sign Out
           </button>
         </div>

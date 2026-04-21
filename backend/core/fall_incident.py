@@ -1,4 +1,5 @@
 from .models import Device, Incident
+from .utils import create_notifications_for_incident
 
 
 def record_fall_incident(device_id, description=''):
@@ -14,4 +15,5 @@ def record_fall_incident(device_id, description=''):
         severity=Incident.SeverityChoices.CRITICAL,
         description=description
     )
+    create_notifications_for_incident(incident)
     return incident

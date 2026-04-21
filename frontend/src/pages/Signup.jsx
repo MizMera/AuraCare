@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Activity, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import axios from 'axios';
 

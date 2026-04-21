@@ -6,6 +6,26 @@ current_person_count = 0
 alert_sent_for_meal = {}
 
 
+def create_notifications_for_incident(incident):
+    recipients = CustomUser.objects.filter(
+        role__in=[CustomUser.RoleChoices.CAREGIVER, CustomUser.RoleChoices.ADMIN]
+    )
+    incident_label = incident.get_type_display() if hasattr(incident, 'get_type_display') else 'Incident'
+    zone_name = incident.zone.name if getattr(incident, 'zone', None) else 'Unknown zone'
+    description = incident.description or f'{incident_label} detected.'
+
+    for user in recipients:
+        Notification.objects.create(
+            message=f"{incident_label} in {zone_name}: {description}",
+            notification_type=Notification.NotificationTypeChoices.INCIDENT,
+            status=Notification.StatusChoices.SENT,
+            user=user,
+            incident=incident,
+            meal=getattr(incident, 'meal', None),
+            resident=getattr(incident, 'resident', None),
+        )
+
+
 def update_person_count(count):
     global current_person_count
     current_person_count = int(count)
