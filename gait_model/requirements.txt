@@ -1,6 +1,0 @@
-opencv-python==4.13.0
-mediapipe==0.10.13
-numpy
-scipy
-joblib
-requests

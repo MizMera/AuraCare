@@ -10,6 +10,7 @@ import SocialInteraction from './SocialInteraction';
 import WanderingDetection from './WanderingDetection';
 import NotificationBell from '../components/NotificationBell';
 import GaitAnalysisPanel from '../components/GaitAnalysisPanel';
+import ChatbotWidget from '../components/ChatbotWidget';
 import { mealService } from '../services/mealService';
 
 const API_HOST = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
@@ -49,6 +50,7 @@ const sidebarBtnHoverHandlers = {
 
 const INCIDENT_COLORS = {
   FALL: { bg: '#FEE2E2', border: '#DC2626', text: '#7F1D1D', badge: '#EF4444' },
+  FALL_RISK: { bg: '#FFFBEB', border: '#D97706', text: '#78350F', badge: '#F59E0B' },
   AGGRESSION: { bg: '#FFF7ED', border: '#EA580C', text: '#7C2D12', badge: '#F97316' },
   WANDERING: { bg: '#FEF3C7', border: '#D97706', text: '#78350F', badge: '#F59E0B' },
   DISTRESS_CRY: { bg: '#EDE9FE', border: '#7C3AED', text: '#4C1D95', badge: '#8B5CF6' },
@@ -944,6 +946,7 @@ function StaffDashboard({ token, onLogout, role }) {
           </div>
         )}
       </main>
+      <ChatbotWidget token={token} />
     </div>
   );
 }
@@ -1144,6 +1147,7 @@ function FamilyDashboard({ token, onLogout }) {
           </div>
         )}
       </main>
+      <ChatbotWidget token={token} />
     </div>
   );
 }

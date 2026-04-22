@@ -113,7 +113,7 @@ def run_seed():
         if resident.risk_level in [Resident.RiskLevelChoices.MEDIUM, Resident.RiskLevelChoices.HIGH]:
             # Generate 1 to 3 incidents
             for _ in range(random.randint(1, 3)):
-                inc_types = ["FALL", "AGGRESSION", "WANDERING", "ABSENCE", "DISTRESS_CRY", "CARDIAC"]
+                inc_types = ["FALL", "FALL_RISK", "AGGRESSION", "WANDERING", "ABSENCE", "DISTRESS_CRY", "CARDIAC"]
                 severities = ["CRITICAL", "HIGH", "MEDIUM"]
                 inc = Incident.objects.create(
                     resident=resident, 

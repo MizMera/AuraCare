@@ -114,6 +114,7 @@ class MealTime(models.Model):
 class Incident(models.Model):
     class IncidentTypeChoices(models.TextChoices):
         FALL = 'FALL', _('Fall')
+        FALL_RISK = 'FALL_RISK', _('Fall Risk')
         AGGRESSION = 'AGGRESSION', _('Aggression')
         WANDERING = 'WANDERING', _('Wandering')
         ABSENCE = 'ABSENCE', _('Absence')

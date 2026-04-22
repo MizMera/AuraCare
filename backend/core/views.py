@@ -5,6 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 from datetime import datetime, timedelta
+from django.db.models import Q
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.http import StreamingHttpResponse, JsonResponse
@@ -32,11 +33,13 @@ from .serializers import (
     CustomTokenObtainPairSerializer
 )
 from .meal_monitor import get_meal_attendance_engine, analyse_meal_frame_bytes
+from .chatbot_rag import answer_from_documents
 from .modelayoub_pipeline import get_artifacts as get_modelayoub_artifacts
 from .modelayoub_pipeline import get_status as get_modelayoub_status
 from .modelayoub_pipeline import launch_pipeline as launch_modelayoub_pipeline
 from .modelayoub_pipeline import stop_pipeline as stop_modelayoub_pipeline
 from .utils import get_current_person_count, create_notifications_for_incident
+from .chatbot_corpus import build_chatbot_documents_for_user
 from .detection import process_frame
 from .camera_arbiter import camera_arbiter
 import cv2
@@ -511,7 +514,7 @@ class GaitIngestView(views.APIView):
                 incident = Incident.objects.create(
                     resident=resident,
                     zone=zone,
-                    type=Incident.IncidentTypeChoices.FALL,
+                    type=Incident.IncidentTypeChoices.FALL_RISK,
                     severity=Incident.SeverityChoices.HIGH,
                     description=f'Abnormal gait detected. Confidence: {confidence:.0f}%',
                 )
@@ -611,8 +614,9 @@ class AnalyzeVideoView(views.APIView):
             subprocess.Popen(
                 [str(interpreter), str(gait_script), '--mode', 'video', '--path', str(video_path)],
                 cwd=str(gait_dir),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+
+                #stdout=subprocess.DEVNULL,
+                #stderr=subprocess.DEVNULL,
             )
         except Exception as exc:
             return Response(
@@ -696,7 +700,6 @@ class NotificationListView(views.APIView):
             existing_incident_ids = set(
                 Notification.objects.filter(
                     user=request.user,
-                    notification_type=Notification.NotificationTypeChoices.INCIDENT,
                     incident__isnull=False,
                 ).values_list('incident_id', flat=True)
             )
@@ -720,7 +723,11 @@ class NotificationListView(views.APIView):
         if unread_only:
             notifications = notifications.filter(is_read=False)
         if incident_only:
-            notifications = notifications.filter(notification_type=Notification.NotificationTypeChoices.INCIDENT)
+            notifications = notifications.filter(
+                Q(notification_type=Notification.NotificationTypeChoices.INCIDENT)
+                | Q(notification_type=Notification.NotificationTypeChoices.ABSENCE)
+                | Q(incident__isnull=False)
+            )
         if today_only:
             notifications = notifications.filter(created_at__date=timezone.localdate())
         return Response(NotificationSerializer(notifications, many=True).data, status=status.HTTP_200_OK)
@@ -746,6 +753,100 @@ class NotificationMarkAllReadView(views.APIView):
             status=Notification.StatusChoices.READ,
         )
         return Response({"status": "ok", "message": f"{count} notifications marked as read"}, status=status.HTTP_200_OK)
+
+
+class ChatbotQueryView(views.APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        question = (request.data.get('question') or '').strip()
+        if not question:
+            return Response({'error': 'Question is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        residents = _residents_for_user(request.user)
+        accessible_residents = residents.count()
+        normalized_question = question.lower().strip()
+
+        # Deterministic diagnosis flow: if resident is missing, ask for clarification.
+        diagnosis_keywords = ['diagnosis', 'diagnose', 'summary', 'status report', 'health status']
+        if any(keyword in normalized_question for keyword in diagnosis_keywords):
+            accessible_residents_qs = residents.order_by('name')
+            matched_resident = None
+            for resident in accessible_residents_qs:
+                resident_name_lower = resident.name.lower()
+                if resident_name_lower in normalized_question:
+                    matched_resident = resident
+                    break
+
+            if matched_resident is None:
+                if accessible_residents == 0:
+                    return Response(
+                        {'answer': 'I cannot generate a diagnosis because your account has no accessible residents.'},
+                        status=status.HTTP_200_OK,
+                    )
+                available_names = list(accessible_residents_qs.values_list('name', flat=True)[:12])
+                return Response(
+                    {
+                        'answer': (
+                            "Please specify the resident name for the diagnosis summary. "
+                            f"Accessible residents: {', '.join(available_names)}."
+                        )
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            resident_incidents = Incident.objects.filter(resident=matched_resident).order_by('-timestamp')[:5]
+            resident_metrics = HealthMetric.objects.filter(resident=matched_resident).order_by('-timestamp')[:5]
+
+            latest_incident = resident_incidents[0] if resident_incidents else None
+            risk_level = matched_resident.risk_level
+            incidents_last_24h = Incident.objects.filter(
+                resident=matched_resident,
+                timestamp__gte=timezone.now() - timedelta(hours=24),
+            ).count()
+
+            if latest_incident:
+                latest_incident_line = (
+                    f"{latest_incident.type} ({latest_incident.severity}) at "
+                    f"{timezone.localtime(latest_incident.timestamp).strftime('%Y-%m-%d %H:%M')}"
+                )
+            else:
+                latest_incident_line = "No incident history recorded yet."
+
+            if resident_metrics:
+                metric_lines = [
+                    f"- {metric.metric_type}: {metric.value} "
+                    f"({timezone.localtime(metric.timestamp).strftime('%Y-%m-%d %H:%M')})"
+                    for metric in resident_metrics
+                ]
+                metrics_block = "\n".join(metric_lines)
+            else:
+                metrics_block = "- No recent health metrics recorded."
+
+            structured_summary = (
+                f"Diagnosis Summary for {matched_resident.name}\n"
+                f"Room: {matched_resident.room_number}\n"
+                f"Risk Level: {risk_level}\n"
+                f"Incidents (last 24h): {incidents_last_24h}\n"
+                f"Latest Incident: {latest_incident_line}\n"
+                f"Recent Metrics:\n{metrics_block}"
+            )
+            return Response({'answer': structured_summary}, status=status.HTTP_200_OK)
+        documents = build_chatbot_documents_for_user(request.user, residents)
+
+        try:
+            answer = answer_from_documents(question, documents)
+        except Exception as exc:
+            return Response(
+                {
+                    'error': 'Chatbot initialization failed. Check Gemini dependencies and GEMINI_API_KEY.',
+                    'details': str(exc),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response({'answer': answer}, status=status.HTTP_200_OK)
 
 
 class IncidentListView(views.APIView):
@@ -815,7 +916,8 @@ class AbsenceCheckView(views.APIView):
                         f"{meal.name} attendance issue: expected {meal.expected_people}, "
                         f"detected {actual_people}."
                     ),
-                    notification_type=Notification.NotificationTypeChoices.ABSENCE,
+                    # Treat meal absence as an incident alert so it always appears in incident-focused feeds.
+                    notification_type=Notification.NotificationTypeChoices.INCIDENT,
                     status=Notification.StatusChoices.SENT,
                     user=user,
                     incident=incident,

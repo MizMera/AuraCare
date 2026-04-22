@@ -72,7 +72,7 @@ export default function Login() {
           </form>
 
           <div className="auth-links">
-            <p>Don't have an account? <Link to="/signup">Register Facility</Link></p>
+            <p>Account access is managed by your administrator.</p>
           </div>
         </div>
       </div>

@@ -1,8 +1,10 @@
 import os
 from pathlib import Path
 from datetime import timedelta
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / '.env')
 DEFAULT_SQLITE_DB_FILENAME = 'db_gait.sqlite3' if (BASE_DIR / 'db_gait.sqlite3').exists() else 'db.sqlite3'
 SQLITE_DB_FILENAME = os.environ.get('AURACARE_DB_FILENAME', DEFAULT_SQLITE_DB_FILENAME)
 
