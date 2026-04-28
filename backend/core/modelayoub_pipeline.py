@@ -4,6 +4,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -123,6 +124,17 @@ def _read_log_tail(limit: int = 50) -> list[str]:
         return list(deque((line.rstrip('\n') for line in handle), maxlen=limit))
 
 
+def _extract_failure_message(log_tail: list[str]) -> str:
+    for line in reversed(log_tail):
+        text = line.strip()
+        if not text or text == 'Traceback (most recent call last):':
+            continue
+        if text.startswith('File "'):
+            continue
+        return f'Pipeline failed to start: {text}'
+    return 'Pipeline failed to start. Check the pipeline log for details.'
+
+
 def _artifact_listing() -> list[dict[str, Any]]:
     output_dir = get_output_dir()
     items: list[dict[str, Any]] = []
@@ -207,7 +219,8 @@ def _current_status() -> dict[str, Any]:
     if payload.get('running') and not _pid_is_running(pid):
         payload['running'] = False
         payload['ended_at'] = payload.get('ended_at') or datetime.now().isoformat()
-        payload['message'] = 'Completed'
+        if payload.get('message') == 'Modelayoub pipeline launched':
+            payload['message'] = 'Completed'
         _write_status(payload)
 
     payload['log_tail'] = _read_log_tail()
@@ -273,6 +286,16 @@ def launch_pipeline(
             'webcam_index': webcam_index,
         }
         _write_status(payload)
+        time.sleep(0.5)
+        if _PROCESS.poll() is not None:
+            failed_payload = {
+                **payload,
+                'running': False,
+                'ended_at': datetime.now().isoformat(),
+                'message': _extract_failure_message(_read_log_tail()),
+            }
+            _write_status(failed_payload)
+            return _current_status()
         return _current_status()
 
 

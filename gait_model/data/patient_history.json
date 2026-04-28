@@ -9873,6 +9873,258 @@
             "cadence": 0.1333,
             "height_ratio": 15.7248
           }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "11:51:32",
+          "label": "abnormal",
+          "confidence": 100.0,
+          "features": {
+            "stride_length": 27.8063,
+            "walking_speed": 0.6314,
+            "arm_swing": 88.4823,
+            "step_variability": 3.3133,
+            "cadence": 0.2,
+            "height_ratio": 3.7525
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "11:51:33",
+          "label": "abnormal",
+          "confidence": 100.0,
+          "features": {
+            "stride_length": 23.9055,
+            "walking_speed": 1.2771,
+            "arm_swing": 93.8582,
+            "step_variability": 9.349,
+            "cadence": 0.1667,
+            "height_ratio": 5.1053
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "11:51:35",
+          "label": "abnormal",
+          "confidence": 97.9,
+          "features": {
+            "stride_length": 17.9729,
+            "walking_speed": 1.4117,
+            "arm_swing": 98.5991,
+            "step_variability": 11.5453,
+            "cadence": 0.1124,
+            "height_ratio": 26.2949
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "11:51:37",
+          "label": "abnormal",
+          "confidence": 99.9,
+          "features": {
+            "stride_length": 15.594,
+            "walking_speed": 1.7807,
+            "arm_swing": 101.1811,
+            "step_variability": 10.9407,
+            "cadence": 0.1525,
+            "height_ratio": 35.3969
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "11:51:39",
+          "label": "abnormal",
+          "confidence": 100.0,
+          "features": {
+            "stride_length": 16.0645,
+            "walking_speed": 1.9572,
+            "arm_swing": 95.5974,
+            "step_variability": 10.828,
+            "cadence": 0.1486,
+            "height_ratio": 29.5604
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "11:51:41",
+          "label": "abnormal",
+          "confidence": 100.0,
+          "features": {
+            "stride_length": 11.5737,
+            "walking_speed": 2.4191,
+            "arm_swing": 92.5882,
+            "step_variability": 9.4748,
+            "cadence": 0.1622,
+            "height_ratio": 36.7449
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "11:51:43",
+          "label": "abnormal",
+          "confidence": 100.0,
+          "features": {
+            "stride_length": 11.278,
+            "walking_speed": 2.7633,
+            "arm_swing": 87.7721,
+            "step_variability": 10.5062,
+            "cadence": 0.1757,
+            "height_ratio": 40.3219
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "11:51:45",
+          "label": "abnormal",
+          "confidence": 100.0,
+          "features": {
+            "stride_length": 15.7303,
+            "walking_speed": 2.9789,
+            "arm_swing": 91.3505,
+            "step_variability": 12.5196,
+            "cadence": 0.1342,
+            "height_ratio": 27.397
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "11:51:47",
+          "label": "abnormal",
+          "confidence": 100.0,
+          "features": {
+            "stride_length": 19.7045,
+            "walking_speed": 2.5115,
+            "arm_swing": 88.4029,
+            "step_variability": 12.6551,
+            "cadence": 0.1333,
+            "height_ratio": 15.7248
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "12:08:03",
+          "label": "abnormal",
+          "confidence": 100.0,
+          "features": {
+            "stride_length": 27.8063,
+            "walking_speed": 0.6314,
+            "arm_swing": 88.4823,
+            "step_variability": 3.3133,
+            "cadence": 0.2,
+            "height_ratio": 3.7525
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "12:08:04",
+          "label": "abnormal",
+          "confidence": 100.0,
+          "features": {
+            "stride_length": 23.9055,
+            "walking_speed": 1.2771,
+            "arm_swing": 93.8582,
+            "step_variability": 9.349,
+            "cadence": 0.1667,
+            "height_ratio": 5.1053
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "12:08:06",
+          "label": "abnormal",
+          "confidence": 97.9,
+          "features": {
+            "stride_length": 17.9729,
+            "walking_speed": 1.4117,
+            "arm_swing": 98.5991,
+            "step_variability": 11.5453,
+            "cadence": 0.1124,
+            "height_ratio": 26.2949
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "12:08:09",
+          "label": "abnormal",
+          "confidence": 99.9,
+          "features": {
+            "stride_length": 15.594,
+            "walking_speed": 1.7807,
+            "arm_swing": 101.1811,
+            "step_variability": 10.9407,
+            "cadence": 0.1525,
+            "height_ratio": 35.3969
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "12:08:13",
+          "label": "abnormal",
+          "confidence": 100.0,
+          "features": {
+            "stride_length": 16.0645,
+            "walking_speed": 1.9572,
+            "arm_swing": 95.5974,
+            "step_variability": 10.828,
+            "cadence": 0.1486,
+            "height_ratio": 29.5604
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "12:08:16",
+          "label": "abnormal",
+          "confidence": 100.0,
+          "features": {
+            "stride_length": 11.5737,
+            "walking_speed": 2.4191,
+            "arm_swing": 92.5882,
+            "step_variability": 9.4748,
+            "cadence": 0.1622,
+            "height_ratio": 36.7449
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "12:08:19",
+          "label": "abnormal",
+          "confidence": 100.0,
+          "features": {
+            "stride_length": 11.278,
+            "walking_speed": 2.7633,
+            "arm_swing": 87.7721,
+            "step_variability": 10.5062,
+            "cadence": 0.1757,
+            "height_ratio": 40.3219
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "12:08:21",
+          "label": "abnormal",
+          "confidence": 100.0,
+          "features": {
+            "stride_length": 15.7303,
+            "walking_speed": 2.9789,
+            "arm_swing": 91.3505,
+            "step_variability": 12.5196,
+            "cadence": 0.1342,
+            "height_ratio": 27.397
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "12:08:24",
+          "label": "abnormal",
+          "confidence": 100.0,
+          "features": {
+            "stride_length": 19.7045,
+            "walking_speed": 2.5115,
+            "arm_swing": 88.4029,
+            "step_variability": 12.6551,
+            "cadence": 0.1333,
+            "height_ratio": 15.7248
+          }
         }
       ]
     },
@@ -10591,6 +10843,90 @@
             "step_variability": 37.3416,
             "cadence": 0.1333,
             "height_ratio": 25.0892
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "11:43:27",
+          "label": "abnormal",
+          "confidence": 81.6,
+          "features": {
+            "stride_length": 64.8987,
+            "walking_speed": 4.6183,
+            "arm_swing": 83.4919,
+            "step_variability": 36.5918,
+            "cadence": 0.1333,
+            "height_ratio": 25.1654
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "11:43:29",
+          "label": "abnormal",
+          "confidence": 74.9,
+          "features": {
+            "stride_length": 63.6824,
+            "walking_speed": 5.8639,
+            "arm_swing": 83.2231,
+            "step_variability": 38.2962,
+            "cadence": 0.1333,
+            "height_ratio": 23.6509
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "11:43:31",
+          "label": "abnormal",
+          "confidence": 93.6,
+          "features": {
+            "stride_length": 50.3473,
+            "walking_speed": 4.099,
+            "arm_swing": 81.9512,
+            "step_variability": 33.1411,
+            "cadence": 0.15,
+            "height_ratio": 30.1061
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "11:43:33",
+          "label": "abnormal",
+          "confidence": 77.7,
+          "features": {
+            "stride_length": 59.6458,
+            "walking_speed": 6.1281,
+            "arm_swing": 83.0042,
+            "step_variability": 35.8635,
+            "cadence": 0.12,
+            "height_ratio": 28.6178
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "11:43:35",
+          "label": "abnormal",
+          "confidence": 85.0,
+          "features": {
+            "stride_length": 61.833,
+            "walking_speed": 7.0305,
+            "arm_swing": 83.9712,
+            "step_variability": 35.9225,
+            "cadence": 0.1282,
+            "height_ratio": 26.2292
+          }
+        },
+        {
+          "date": "2026-04-22",
+          "time": "11:43:37",
+          "label": "abnormal",
+          "confidence": 79.5,
+          "features": {
+            "stride_length": 60.7457,
+            "walking_speed": 7.2202,
+            "arm_swing": 84.7505,
+            "step_variability": 36.642,
+            "cadence": 0.1204,
+            "height_ratio": 25.1798
           }
         }
       ]

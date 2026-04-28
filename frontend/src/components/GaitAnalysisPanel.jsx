@@ -280,7 +280,7 @@ export default function GaitAnalysisPanel({ token, onLogout }) {
       setErrorMsg('');
     } catch (error) {
       if (error.response?.status === 401) onLogout();
-      else if (error.response?.status === 403) setErrorMsg('Only caregiver and admin accounts can access Yomna’s gait module.');
+      else if (error.response?.status === 403) setErrorMsg('Only caregiver and admin accounts can access the gait module.');
       else setErrorMsg('Unable to load gait analysis history right now.');
     } finally {
       setLoading(false);
@@ -313,7 +313,7 @@ export default function GaitAnalysisPanel({ token, onLogout }) {
       return;
     }
     setUploadStatus('error');
-    setUploadMessage('Please select a valid video file so Yomna’s model can analyze it.');
+    setUploadMessage('Please select a valid video file so the gait model can analyze it.');
   };
 
   const handleSubmit = async () => {
@@ -347,7 +347,7 @@ export default function GaitAnalysisPanel({ token, onLogout }) {
   if (loading) {
     return (
       <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--midnight-green)' }}>
-        <h2>Loading Yomna&apos;s gait module...</h2>
+        <h2>Loading gait module...</h2>
       </div>
     );
   }
@@ -358,7 +358,7 @@ export default function GaitAnalysisPanel({ token, onLogout }) {
         <div style={{ ...sectionCardStyle, borderTop: '4px solid #0EA5E9' }}>
           <p style={{ margin: 0, color: 'var(--text-light)', fontWeight: 700 }}>Residents Monitored</p>
           <h2 style={{ margin: '0.45rem 0 0', color: 'var(--midnight-green)', fontSize: '2rem' }}>{residents.length}</h2>
-          <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)', fontSize: '0.9rem' }}>Residents visible in Yomna&apos;s gait history</p>
+          <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)', fontSize: '0.9rem' }}>Residents visible in gait history</p>
         </div>
         <div style={{ ...sectionCardStyle, borderTop: '4px solid #DC2626' }}>
           <p style={{ margin: 0, color: 'var(--text-light)', fontWeight: 700 }}>Active Gait Alerts</p>
@@ -388,7 +388,7 @@ export default function GaitAnalysisPanel({ token, onLogout }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div>
             <p style={{ margin: 0, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.12em', opacity: 0.75 }}>
-              Yomna&apos;s Module
+              Gait Module
             </p>
             <h2 style={{ margin: '0.35rem 0 0', fontSize: '2rem' }}>Gait Intelligence Studio</h2>
             <p style={{ margin: '0.7rem 0 0', maxWidth: '42rem', color: 'rgba(255,255,255,0.82)' }}>
@@ -425,7 +425,7 @@ export default function GaitAnalysisPanel({ token, onLogout }) {
             <Upload size={18} color="#0EA5E9" /> Upload Recording
           </h3>
           <p style={{ margin: 0, color: 'var(--text-light)', fontSize: '0.92rem' }}>
-            Start the same analysis workflow Yomna added, but from the main dashboard.
+            Start the same analysis workflow directly from the main dashboard.
           </p>
 
           <div
@@ -540,7 +540,7 @@ export default function GaitAnalysisPanel({ token, onLogout }) {
                 <Activity size={18} color="#0EA5E9" /> Gait History
               </h3>
               <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)', fontSize: '0.92rem' }}>
-                Review the latest gait state, repeated alerts, and Yomna&apos;s per-session features.
+                Review the latest gait state, repeated alerts, and per-session features.
               </p>
             </div>
             <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>

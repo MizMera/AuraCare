@@ -591,7 +591,7 @@ class AnalyzeVideoView(views.APIView):
         gait_script, interpreter, gait_dir = _resolve_gait_runtime()
         if not gait_script.exists():
             return Response(
-                {'error': "Yomna's gait model files are missing from the repository."},
+                {'error': "Gait model files are missing from the repository."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         if interpreter is None:
@@ -627,7 +627,7 @@ class AnalyzeVideoView(views.APIView):
         return Response(
             {
                 'status': 'analysis_started',
-                'message': f'Analyzing {video_file.name}. Yomna’s gait results will appear in the dashboard shortly.',
+                'message': f'Analyzing {video_file.name}. Gait results will appear in the dashboard shortly.',
                 'video': safe_name,
             },
             status=status.HTTP_202_ACCEPTED,
@@ -1020,7 +1020,7 @@ class VideoStreamView(views.APIView):
                 {
                     "error": (
                         f"Webcam is currently in use by {owner.replace('_', ' ')}. "
-                        "Stop the other live camera first, then start Meriem's meal stream again."
+                        "Stop the other live camera first, then start the meal stream again."
                     )
                 },
                 status=status.HTTP_409_CONFLICT,
@@ -1030,7 +1030,7 @@ class VideoStreamView(views.APIView):
         if not cap.isOpened():
             camera_arbiter.release('meal_stream')
             return Response(
-                {"error": "Unable to open the webcam for Meriem's meal detection stream."},
+                {"error": "Unable to open the webcam for the meal detection stream."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 

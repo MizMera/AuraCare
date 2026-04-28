@@ -310,7 +310,7 @@ function MealManagementPanel({ token, role, incidents, onLogout }) {
           onLogout();
         } else {
           const backendMessage = err.response?.data?.error;
-          setCameraError(backendMessage || 'Unable to read Meriem’s person-count stream.');
+          setCameraError(backendMessage || 'Unable to read the person-count stream.');
         }
       }
     };
@@ -358,7 +358,7 @@ function MealManagementPanel({ token, role, incidents, onLogout }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
             <div>
               <h3 style={{ margin: 0, color: 'var(--midnight-green)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <UtensilsCrossed size={18} color="var(--moonstone)" /> Meriem Meal Module
+                <UtensilsCrossed size={18} color="var(--moonstone)" /> Meal Module
               </h3>
               <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)' }}>
                 Structured meal timing and absence monitoring, restyled to match the current dashboard.
@@ -416,7 +416,7 @@ function MealManagementPanel({ token, role, incidents, onLogout }) {
               <UtensilsCrossed size={30} color="var(--moonstone)" style={{ marginBottom: '0.75rem', opacity: 0.8 }} />
               <p style={{ margin: 0, color: 'var(--midnight-green)', fontWeight: 700 }}>No meal schedule yet</p>
               <p style={{ margin: '0.45rem 0 0', color: 'var(--text-light)' }}>
-                Add the first meal slot to activate Meriem&apos;s absence workflow.
+                Add the first meal slot to activate the absence workflow.
               </p>
             </div>
           )}
@@ -428,7 +428,7 @@ function MealManagementPanel({ token, role, incidents, onLogout }) {
               {editingMealId ? 'Edit Meal Slot' : 'Add Meal Slot'}
             </h3>
             <p style={{ margin: '0 0 1.25rem 0', color: 'var(--text-light)' }}>
-              Keep Meriem&apos;s attendance model configured from the main admin experience.
+              Keep the attendance model configured from the main admin experience.
             </p>
 
             {editingMealId && (
@@ -511,7 +511,7 @@ function MealManagementPanel({ token, role, incidents, onLogout }) {
               <Eye size={18} color="var(--moonstone)" /> Meal Attendance Camera
             </h3>
             <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)' }}>
-              Live people-count detection from Meriem&apos;s branch, now integrated into the main meal module.
+              Live people-count detection integrated into the main meal module.
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -549,11 +549,11 @@ function MealManagementPanel({ token, role, incidents, onLogout }) {
               <img
                 key={cameraStreamKey}
                 src={`${API_BASE}/video/stream/?t=${cameraStreamKey}`}
-                alt="Meriem meal attendance stream"
+                alt="Meal attendance stream"
                 onLoad={() => setCameraError('')}
                 onError={() => {
                   setCameraRunning(false);
-                  setCameraError('Unable to load Meriem’s video stream. If the aggression stream is active, stop it first, then try again.');
+                  setCameraError('Unable to load the video stream. If the aggression stream is active, stop it first, then try again.');
                 }}
                 style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', minHeight: '340px' }}
               />
@@ -562,7 +562,7 @@ function MealManagementPanel({ token, role, incidents, onLogout }) {
                 <Video size={54} style={{ marginBottom: '1rem', opacity: 0.7 }} />
                 <p style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Camera idle</p>
                 <p style={{ margin: '0.45rem 0 0', maxWidth: '24rem' }}>
-                  Start Meriem&apos;s detection stream to count people directly from the backend camera pipeline.
+                  Start the detection stream to count people directly from the backend camera pipeline.
                 </p>
               </div>
             )}
@@ -763,7 +763,7 @@ function StaffDashboard({ token, onLogout, role }) {
               token={token}
               onLogout={onLogout}
               title="Social Interaction"
-              description="Sarra's combined social-isolation model is now reachable from the caregiver sidebar."
+              description="The combined social-isolation model is now reachable from the caregiver sidebar."
             />
           </div>
         ) : staffSection === 'wandering' ? (
@@ -777,8 +777,8 @@ function StaffDashboard({ token, onLogout, role }) {
                 <h1 style={{ color: 'var(--midnight-green)', margin: 0 }}>Caregiver Dashboard</h1>
                 <p style={{ color: 'var(--text-light)', margin: 0 }}>
                   {staffSection === 'livefeed' ? 'Monitor live aggression detection feeds' :
-                    staffSection === 'gait' ? 'Review Yomna’s gait-analysis results and launch new recordings' :
-                    staffSection === 'meals' ? 'Coordinate Meriem’s meal schedule and related alerts' :
+                    staffSection === 'gait' ? 'Review gait-analysis results and launch new recordings' :
+                    staffSection === 'meals' ? '' :
                       staffSection === 'wandering' ? 'Review wandering risk scores, trajectories, and generated reports' :
                       staffSection === 'incidents' ? 'View all facility incidents and history' :
                         'Monitor all assigned residents for your shift'}

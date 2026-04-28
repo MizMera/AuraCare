@@ -124,6 +124,7 @@ const makeLocalSession = ({ filename, counters, durationSeconds, events, source 
     weekly_scores: weeklyScores,
     saved_locally: true,
     saved_without_video: savedWithoutVideo,
+    local_events: events,
   };
 };
 
@@ -168,6 +169,11 @@ export default function SocialInteraction({
   const [uploadPct, setUploadPct]       = useState(0);
   const [uploadResult, setUploadResult] = useState(null);
   const [dragOver, setDragOver]         = useState(false);
+  const [selectedSession, setSelectedSession] = useState(null);
+  const [sessionDetails, setSessionDetails] = useState(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState('');
+  const [residentDirectory, setResidentDirectory] = useState([]);
 
   const authHeader = { Authorization: `Bearer ${token}` };
 
@@ -190,7 +196,55 @@ export default function SocialInteraction({
     }
   }, [token, hydrateLocalSessions]); // eslint-disable-line
 
+  const fetchResidents = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/mobile/dashboard/`, { headers: authHeader });
+      const residents = Array.isArray(response.data) ? response.data : [];
+      const normalized = residents
+        .filter((resident) => resident?.id)
+        .map((resident) => ({ id: Number(resident.id), name: resident.name }))
+        .sort((a, b) => a.id - b.id);
+      setResidentDirectory(normalized);
+    } catch (error) {
+      if (error.response?.status === 401) onLogout();
+    }
+  }, [token]); // eslint-disable-line
+
   useEffect(() => { fetchSessions(); }, [fetchSessions]);
+  useEffect(() => { fetchResidents(); }, [fetchResidents]);
+
+  const closeDetails = () => {
+    setSelectedSession(null);
+    setSessionDetails(null);
+    setDetailsError('');
+    setDetailsLoading(false);
+  };
+
+  const openDetails = async (session) => {
+    setSelectedSession(session);
+    setDetailsError('');
+    setSessionDetails(null);
+
+    if (String(session.id).startsWith('local-')) {
+      const localEvents = Array.isArray(session.local_events) ? session.local_events : [];
+      setSessionDetails({ ...session, events: localEvents });
+      return;
+    }
+
+    setDetailsLoading(true);
+    try {
+      const response = await axios.get(`${API_BASE}/isolation/sessions/${session.id}/`, { headers: authHeader });
+      setSessionDetails(response.data);
+    } catch (error) {
+      if (error.response?.status === 401) {
+        onLogout();
+        return;
+      }
+      setDetailsError('Unable to load isolated-person details for this video.');
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
 
   // ── Webcam ────────────────────────────────────────────────
   const startWebcam = async () => {
@@ -416,6 +470,35 @@ export default function SocialInteraction({
 
   const rtTotal = rtCounters.actif + rtCounters.vig + rtCounters.iso || 1;
   const rtPct   = Math.round(rtCounters.iso / rtTotal * 100);
+  const formatResidentTrack = useCallback((trackId) => {
+    const raw = String(trackId || 'Unknown');
+    const match = raw.match(/(\d+)/);
+    if (!match) return raw;
+    const trackIndex = Number(match[1]) - 1;
+    if (trackIndex < 0 || trackIndex >= residentDirectory.length) return raw;
+    const resident = residentDirectory[trackIndex];
+    return `ID${resident.id} - ${resident.name}`;
+  }, [residentDirectory]);
+  const isolatedEvents = Array.isArray(sessionDetails?.events)
+    ? sessionDetails.events.filter((event) => event.event_type === 'isole')
+    : [];
+  const isolatedSummaries = Object.values(isolatedEvents.reduce((acc, event) => {
+    const trackId = event.track_id || 'Unknown';
+    if (!acc[trackId]) {
+      acc[trackId] = {
+        track_id: trackId,
+        occurrences: 0,
+        max_confidence: 0,
+        first_seen: event.timestamp_seconds,
+        last_seen: event.timestamp_seconds,
+      };
+    }
+    acc[trackId].occurrences += 1;
+    acc[trackId].max_confidence = Math.max(acc[trackId].max_confidence, Number(event.confidence || 0));
+    acc[trackId].first_seen = Math.min(acc[trackId].first_seen, Number(event.timestamp_seconds || 0));
+    acc[trackId].last_seen = Math.max(acc[trackId].last_seen, Number(event.timestamp_seconds || 0));
+    return acc;
+  }, {})).sort((a, b) => b.occurrences - a.occurrences);
 
   // ── Render ────────────────────────────────────────────────
   if (loading) {
@@ -518,7 +601,7 @@ export default function SocialInteraction({
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
                   <thead>
                     <tr style={{ background:'#F8FAFC' }}>
-                      {['File','Source','Date','🟢 Active','🟡 Vigilance','🔴 Isolated','Isolation score'].map(h => (
+                      {['File','Date','🟢 Active','🟡 Vigilance','🔴 Isolated','Isolation score','Details'].map(h => (
                         <th key={h} style={{ padding:'10px 16px', textAlign:'left', fontSize:11,
                           fontWeight:700, color:'var(--text-light)', textTransform:'uppercase',
                           letterSpacing:'.04em', whiteSpace:'nowrap' }}>{h}</th>
@@ -528,16 +611,10 @@ export default function SocialInteraction({
                   <tbody>
                     {sessions.map(s => (
                       <tr key={s.id} style={{ borderTop:'1px solid #F1F5F9' }}>
-                        <td style={{ padding:'12px 16px', fontWeight:600, color:'var(--midnight-green)',
-                          maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                          {s.filename}
-                        </td>
-                        <td style={{ padding:'12px 16px' }}>
-                          <span style={{ padding:'3px 9px', borderRadius:99, fontSize:11, fontWeight:700,
-                            background: s.source==='webcam' ? '#EFF6FF' : '#ECFDF5',
-                            color: s.source==='webcam' ? '#1D4ED8' : '#065F46' }}>
-                            {s.source === 'webcam' ? '📷 Webcam' : '📁 Upload'}
-                          </span>
+                        <td style={{ padding:'12px 16px', fontWeight:600, color:'var(--midnight-green)', maxWidth:220 }}>
+                          <div style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                            {s.filename}
+                          </div>
                         </td>
                         <td style={{ padding:'12px 16px', color:'var(--text-light)', fontSize:12, whiteSpace:'nowrap' }}>
                           {new Date(s.uploaded_at).toLocaleString('fr-FR')}
@@ -549,6 +626,23 @@ export default function SocialInteraction({
                           <span style={{ fontSize:16, fontWeight:800, color:scoreColor(s.isolation_score) }}>
                             {Math.round(s.isolation_score)}%
                           </span>
+                        </td>
+                        <td style={{ padding:'12px 16px' }}>
+                          <button
+                            type="button"
+                            onClick={() => openDetails(s)}
+                            style={{
+                              padding:'8px 12px',
+                              borderRadius:'10px',
+                              border:'1px solid #D7E3EA',
+                              background:'white',
+                              color:'var(--midnight-green)',
+                              fontWeight:700,
+                              cursor:'pointer',
+                            }}
+                          >
+                            Details
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -723,6 +817,7 @@ export default function SocialInteraction({
                   }} />
                   <div style={{ flex:1, fontSize:12 }}>
                     <strong>{ev.track_id}</strong>
+                    {formatResidentTrack(ev.track_id) !== String(ev.track_id) ? ` (${formatResidentTrack(ev.track_id).replace(`${ev.track_id} - `, '')})` : ''}
                     <span style={{ color:'var(--text-light)' }}> · t={ev.ts}s · {ev.confidence.toFixed(1)}% conf.</span>
                   </div>
                   <Pill type={ev.event_type} />
@@ -857,6 +952,120 @@ export default function SocialInteraction({
               </div>
             )}
           </Card>
+        </div>
+      )}
+
+      {selectedSession && (
+        <div
+          onClick={closeDetails}
+          style={{
+            position:'fixed',
+            inset:0,
+            background:'rgba(15, 23, 42, 0.45)',
+            display:'flex',
+            alignItems:'center',
+            justifyContent:'center',
+            padding:'1.5rem',
+            zIndex:1000,
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width:'min(820px, 100%)',
+              maxHeight:'85vh',
+              overflowY:'auto',
+              background:'white',
+              borderRadius:'20px',
+              boxShadow:'0 25px 60px rgba(15, 23, 42, 0.22)',
+              padding:'1.5rem',
+            }}
+          >
+            <div style={{ display:'flex', justifyContent:'space-between', gap:'1rem', alignItems:'flex-start', marginBottom:'1rem' }}>
+              <div>
+                <h3 style={{ margin:'0 0 0.35rem', color:'var(--midnight-green)' }}>Isolated People Details</h3>
+                <p style={{ margin:0, color:'var(--text-light)', fontSize:13 }}>
+                  {selectedSession.filename} · {new Date(selectedSession.uploaded_at).toLocaleString('fr-FR')}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeDetails}
+                style={{ border:'none', background:'transparent', cursor:'pointer', fontSize:24, color:'#64748B', lineHeight:1 }}
+              >
+                ×
+              </button>
+            </div>
+
+            {detailsLoading ? (
+              <p style={{ margin:0, color:'var(--text-light)' }}>Loading session details…</p>
+            ) : detailsError ? (
+              <div style={{ padding:'1rem', borderRadius:'14px', background:'#FEF2F2', color:'#B91C1C', fontWeight:600 }}>
+                {detailsError}
+              </div>
+            ) : (
+              <>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'0.85rem', marginBottom:'1.25rem' }}>
+                  {[
+                    { label:'Isolated events', value: isolatedEvents.length, color:'#B91C1C', bg:'#FEF2F2' },
+                    { label:'People flagged', value: isolatedSummaries.length, color:'#7C2D12', bg:'#FFF7ED' },
+                    { label:'Duration', value: `${sessionDetails?.duration_seconds || selectedSession.duration_seconds || 0}s`, color:'#0F766E', bg:'#ECFDF5' },
+                    { label:'Isolation score', value: `${Math.round(sessionDetails?.isolation_score ?? selectedSession.isolation_score ?? 0)}%`, color:scoreColor(sessionDetails?.isolation_score ?? selectedSession.isolation_score ?? 0), bg:'#F8FAFC' },
+                  ].map((item) => (
+                    <div key={item.label} style={{ padding:'0.95rem 1rem', borderRadius:'14px', background:item.bg }}>
+                      <div style={{ fontSize:12, color:'var(--text-light)', fontWeight:700 }}>{item.label}</div>
+                      <div style={{ marginTop:'0.35rem', fontSize:'1.2rem', color:item.color, fontWeight:800 }}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {isolatedSummaries.length === 0 ? (
+                  <div style={{ padding:'1rem', borderRadius:'14px', background:'#F8FAFC', color:'var(--text-light)' }}>
+                    No isolated people were recorded for this session.
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ marginBottom:'1rem' }}>
+                      <h4 style={{ margin:'0 0 0.5rem', color:'var(--midnight-green)' }}>Detected isolated people</h4>
+                      <div style={{ display:'grid', gap:'0.75rem' }}>
+                        {isolatedSummaries.map((item) => (
+                          <div key={item.track_id} style={{ border:'1px solid #E2E8F0', borderRadius:'14px', padding:'1rem' }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', gap:'1rem', flexWrap:'wrap' }}>
+                              <div>
+                                <div style={{ fontWeight:800, color:'var(--midnight-green)' }}>{formatResidentTrack(item.track_id)}</div>
+                                <div style={{ color:'var(--text-light)', fontSize:12 }}>
+                                  First seen at {item.first_seen}s · Last seen at {item.last_seen}s
+                                </div>
+                              </div>
+                              <div style={{ textAlign:'right' }}>
+                                <div style={{ fontWeight:800, color:'#B91C1C' }}>{item.occurrences} isolated event{item.occurrences !== 1 ? 's' : ''}</div>
+                                <div style={{ color:'var(--text-light)', fontSize:12 }}>Max confidence {item.max_confidence.toFixed(1)}%</div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 style={{ margin:'0 0 0.5rem', color:'var(--midnight-green)' }}>Isolation timeline</h4>
+                      <div style={{ display:'grid', gap:'0.65rem' }}>
+                        {isolatedEvents.map((event, index) => (
+                          <div key={`${event.track_id}-${event.timestamp_seconds}-${index}`} style={{ display:'flex', justifyContent:'space-between', gap:'1rem', padding:'0.9rem 1rem', borderRadius:'12px', background:'#F8FAFC' }}>
+                            <div>
+                              <div style={{ fontWeight:700, color:'var(--midnight-green)' }}>{formatResidentTrack(event.track_id)}</div>
+                              <div style={{ color:'var(--text-light)', fontSize:12 }}>Detected at {event.timestamp_seconds}s</div>
+                            </div>
+                            <Pill type="isole" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
