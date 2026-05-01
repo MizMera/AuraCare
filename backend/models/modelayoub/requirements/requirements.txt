@@ -1,0 +1,9 @@
+﻿ipython
+matplotlib
+numpy
+opencv-python-headless
+pandas
+scipy
+seaborn
+torch
+ultralytics

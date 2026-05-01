@@ -1,0 +1,11 @@
+{
+  "running": true,
+  "pid": 7896,
+  "requested_by": "emna",
+  "started_at": "2026-04-28T10:05:26.460677",
+  "ended_at": null,
+  "message": "Modelayoub pipeline launched",
+  "input_mode": "webcam",
+  "video_input_path": null,
+  "webcam_index": 0
+}
