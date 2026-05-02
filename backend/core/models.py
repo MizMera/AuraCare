@@ -41,6 +41,8 @@ class Resident(models.Model):
         choices=RiskLevelChoices.choices, 
         default=RiskLevelChoices.LOW
     )
+
+
     photo = models.ImageField(
         upload_to='resident_photos/',
         null=True,
@@ -147,6 +149,9 @@ class Incident(models.Model):
         ABSENCE = 'ABSENCE', _('Absence')
         DISTRESS_CRY = 'DISTRESS_CRY', _('Distress Cry')
         CARDIAC = 'CARDIAC', _('Cardiac')
+        #medications
+        MEDICATION_MISSED = 'MEDICATION_MISSED', _('Medication Missed')  
+
 
     class SeverityChoices(models.TextChoices):
         CRITICAL = 'CRITICAL', _('Critical')
@@ -376,3 +381,171 @@ class GaitObservation(models.Model):
     def __str__(self):
         resident_name = self.resident.name if self.resident else 'Unknown'
         return f'{resident_name} - {self.label} ({self.confidence:.0f}%)'
+
+# ─────────────────────────────────────────────────────────────
+# Medication Adherence Prediction
+# ─────────────────────────────────────────────────────────────
+
+class Medication(models.Model):
+    """
+    Represents a medication prescribed to a resident.
+    Each resident can have multiple medications with different schedules.
+    """
+
+    class FrequencyChoices(models.TextChoices):
+        ONCE_DAILY       = 'once_daily',       _('Once Daily')
+        TWICE_DAILY      = 'twice_daily',      _('Twice Daily')
+        THREE_TIMES      = 'three_times_daily', _('Three Times Daily')
+        WEEKLY           = 'weekly',           _('Weekly')
+        AS_NEEDED        = 'as_needed',        _('As Needed')
+
+    resident         = models.ForeignKey(
+        'Resident',
+        on_delete=models.CASCADE,
+        related_name='medications'
+    )
+    name             = models.CharField(max_length=100, help_text="e.g. Metformin, Aspirin")
+    dosage           = models.CharField(max_length=50, blank=True, help_text="e.g. 500mg")
+    frequency        = models.CharField(
+        max_length=30,
+        choices=FrequencyChoices.choices,
+        default=FrequencyChoices.ONCE_DAILY
+    )
+    scheduled_time   = models.TimeField(help_text="Primary scheduled time e.g. 08:00")
+    scheduled_time_2 = models.TimeField(
+        null=True, blank=True,
+        help_text="Second dose time (for twice daily)"
+    )
+    scheduled_time_3 = models.TimeField(
+        null=True, blank=True,
+        help_text="Third dose time (for three times daily)"
+    )
+    is_active        = models.BooleanField(default=True)
+    notes            = models.TextField(blank=True, help_text="Special instructions")
+    created_at       = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['resident', 'scheduled_time']
+
+    def __str__(self):
+        return f"{self.resident.name} — {self.name} ({self.dosage})"
+
+
+class MedicationLog(models.Model):
+    """
+    One row per medication event (taken, missed, late, refused).
+    Logged manually by a nurse via the dashboard.
+    This is the primary training data for the adherence prediction model.
+    """
+
+    class StatusChoices(models.TextChoices):
+        TAKEN    = 'taken',    _('Taken')
+        MISSED   = 'missed',   _('Missed')
+        LATE     = 'late',     _('Late')
+        REFUSED  = 'refused',  _('Refused')
+
+    resident      = models.ForeignKey(
+        'Resident',
+        on_delete=models.CASCADE,
+        related_name='medication_logs'
+    )
+    medication    = models.ForeignKey(
+        Medication,
+        on_delete=models.CASCADE,
+        related_name='logs'
+    )
+    scheduled_at  = models.DateTimeField(help_text="When the medication was supposed to be taken")
+    actual_taken_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Actual time taken — null if missed or refused"
+    )
+    status        = models.CharField(
+        max_length=20,
+        choices=StatusChoices.choices,
+        default=StatusChoices.TAKEN
+    )
+    logged_by     = models.ForeignKey(
+        'CustomUser',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='medication_logs_created',
+        limit_choices_to={'role': 'CAREGIVER'}
+    )
+    notes         = models.TextField(blank=True)
+    created_at    = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-scheduled_at']
+
+    def __str__(self):
+        return f"{self.resident.name} — {self.medication.name} — {self.get_status_display()} on {self.scheduled_at.date()}"
+
+    @property
+    def is_missed(self):
+        return self.status in ['missed', 'refused']
+
+
+class AdherenceRiskScore(models.Model):
+    """
+    Daily risk score per resident, generated every night by the prediction pipeline.
+    Phase 1: rule-based scorer.
+    Phase 2: XGBoost model after ~4 weeks of MedicationLog data.
+    """
+
+    class RiskLevelChoices(models.TextChoices):
+        LOW    = 'low',    _('Low')
+        MEDIUM = 'medium', _('Medium')
+        HIGH   = 'high',   _('High')
+
+    class ModelVersionChoices(models.TextChoices):
+        RULE_BASED = 'rule_based', _('Rule-Based')
+        XGBOOST    = 'xgboost',   _('XGBoost')
+
+    resident      = models.ForeignKey(
+        'Resident',
+        on_delete=models.CASCADE,
+        related_name='adherence_scores'
+    )
+    score         = models.FloatField(
+        help_text="Risk probability 0.0 (safe) to 1.0 (certain miss)"
+    )
+    risk_level    = models.CharField(
+        max_length=10,
+        choices=RiskLevelChoices.choices,
+        default=RiskLevelChoices.LOW
+    )
+    predicted_for = models.DateField(
+        help_text="The date this score predicts risk for (tomorrow)"
+    )
+    generated_at  = models.DateTimeField(auto_now_add=True)
+    model_version = models.CharField(
+        max_length=20,
+        choices=ModelVersionChoices.choices,
+        default=ModelVersionChoices.RULE_BASED
+    )
+
+    # --- Input features snapshot (for explainability & debugging) ---
+    adherence_rate_7d      = models.FloatField(default=0.0, help_text="% taken in last 7 days")
+    adherence_rate_30d     = models.FloatField(default=0.0, help_text="% taken in last 30 days")
+    meal_skips_7d          = models.PositiveIntegerField(default=0)
+    gait_abnormal_days_7d  = models.PositiveIntegerField(default=0)
+    isolation_days_7d      = models.PositiveIntegerField(default=0)
+    days_since_last_fall   = models.IntegerField(default=999)
+
+    # --- Explainability: which factors drove the score ---
+    contributing_factors   = models.JSONField(
+        default=list,
+        help_text="List of factors that raised the score e.g. ['meal_skipping', 'gait_decline']"
+    )
+
+    class Meta:
+        ordering = ['-predicted_for']
+        unique_together = ['resident', 'predicted_for']  # one score per resident per day
+
+    def __str__(self):
+        return f"{self.resident.name} — {self.get_risk_level_display()} risk on {self.predicted_for}"
+
+    @property
+    def risk_color(self):
+        return {'low': 'green', 'medium': 'orange', 'high': 'red'}.get(self.risk_level, 'grey')

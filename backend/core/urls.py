@@ -46,6 +46,13 @@ from .views import (
     AggressionStreamStatusView,
     aggression_stream_feed,
     meal_attendance_feed,
+    #medications 
+    MedicationListCreateView,
+    MedicationLogCreateView,
+    MedicationLogListView,
+    AdherenceRiskTodayView,
+    AdherenceRiskHistoryView,
+    RunAdherencePredictionView,
 )
 
 urlpatterns = [
@@ -103,4 +110,15 @@ urlpatterns = [
     # Facial Recognition
     path('face/identify/', FaceIdentifyView.as_view(), name='face-identify'),
     path('face/status/', FaceEncodingStatusView.as_view(), name='face-status'),
+    
+    #medications
+    path('medication/residents/<int:resident_id>/', MedicationListCreateView.as_view(), name='medication-list-create'),
+    path('medication/log/',                         MedicationLogCreateView.as_view(),  name='medication-log-create'),
+    path('medication/log/<int:resident_id>/',        MedicationLogListView.as_view(),    name='medication-log-list'),
+ 
+    # Adherence risk prediction
+    path('adherence/risk/today/',                   AdherenceRiskTodayView.as_view(),       name='adherence-risk-today'),
+    path('adherence/risk/<int:resident_id>/',        AdherenceRiskHistoryView.as_view(),     name='adherence-risk-history'),
+    path('adherence/run/',                           RunAdherencePredictionView.as_view(),   name='adherence-run'),
+
 ]

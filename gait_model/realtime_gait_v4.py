@@ -15,6 +15,79 @@ from datetime import datetime
 from scipy.signal import find_peaks
 from scipy.spatial.distance import euclidean
 
+import os, sys, json
+import django
+import numpy as np
+ 
+# Django setup so we can query the DB
+sys.path.insert(0, r'C:\Users\yomna\Downloads\AuraCare\main17\AuraCare\backend')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+django.setup()
+ 
+from core.models import Resident
+from deepface import DeepFace
+ 
+# ── Load all enrolled face encodings from DB once at startup ──
+_ENROLLED_RESIDENTS = []
+ 
+def load_enrolled_residents():
+    global _ENROLLED_RESIDENTS
+    from core.models import FaceEncoding
+    encodings = FaceEncoding.objects.select_related('resident').all()
+    _ENROLLED_RESIDENTS = []
+    for fe in encodings:
+        try:
+            encoding = json.loads(fe.encoding_json)
+            _ENROLLED_RESIDENTS.append({
+                'id':       fe.resident.id,
+                'name':     fe.resident.name,
+                'encoding': encoding,
+            })
+        except Exception:
+            pass
+    print(f'✅ Loaded {len(_ENROLLED_RESIDENTS)} enrolled residents for face ID')
+
+
+def identify_face_from_frame(frame, threshold=0.68):
+    """
+    Given an OpenCV frame, identify which resident it is.
+    Returns (resident_id, resident_name, confidence) or None
+    """
+    if not _ENROLLED_RESIDENTS:
+        return None
+    try:
+        result = DeepFace.represent(
+            img_path=frame,
+            model_name='ArcFace',
+            enforce_detection=False,
+            detector_backend='opencv',
+        )
+        if not result:
+            return None
+ 
+        face_enc = np.array(result[0]['embedding'])
+        best_match = None
+        best_distance = float('inf')
+ 
+        for candidate in _ENROLLED_RESIDENTS:
+            stored = np.array(candidate['encoding'])
+            cosine_sim = np.dot(face_enc, stored) / (
+                np.linalg.norm(face_enc) * np.linalg.norm(stored)
+            )
+            distance = 1 - cosine_sim
+            if distance < best_distance:
+                best_distance = distance
+                best_match = candidate
+ 
+        if best_distance < threshold:
+            confidence = round((1 - best_distance) * 100, 1)
+            return best_match['id'], best_match['name'], confidence
+        return None
+    except Exception:
+        return None
+ 
 # ── Backend API ────────────────────────────────────────────────────────
 BACKEND_URL = 'http://127.0.0.1:8000/api/gait/ingest/'
 API_KEY     = 'default-secret-key'
@@ -475,6 +548,7 @@ def run(source=0, output_path=None):
 
     db = load_db()
     print(f'✅ Database: {len(db["patients"])} registered patients')
+    load_enrolled_residents()
 
     print('\n=== Gait Monitor v4 — Multi-Person ===')
     print('Controls:')
@@ -572,10 +646,10 @@ def run(source=0, output_path=None):
                 # Gait analysis
                 if (len(tr['kp_seq']) >= MIN_FRAMES and
                         frame_idx - tr['last_analyzed'] >= window_frames):
-
+ 
                     tr['last_analyzed'] = frame_idx
                     feats = compute_gait_features(tr['kp_seq'])
-
+ 
                     if feats:
                         X    = np.array([[feats[c] for c in feat_cols]])
                         pred = model.predict(X)[0]
@@ -583,12 +657,32 @@ def run(source=0, output_path=None):
                         tr['label']      = label_map[pred]
                         tr['confidence'] = float(prob[pred] * 100)
                         tr['features']   = feats
+ 
+                        # ── FACE IDENTIFICATION (new) ──────────────────
+                        face_result = identify_face_from_frame(frame)
+                        if face_result:
+                            res_id, res_name, face_conf = face_result
+                            tr['patient_id']   = str(res_id)
+                            tr['patient_name'] = res_name
+                            print(f'  🎭 Face ID: {res_name} ({face_conf}%)')
+                        # ───────────────────────────────────────────────
+ 
                         threading.Thread(
                             target=save_clip_and_send,
                             args=(tr['patient_name'], tr['label'], tr['confidence'],
                                 feats, tr['frame_buffer'].copy(), fps, width, height),
                             daemon=True
                         ).start()
+ 
+                        print(f'\n👤 {tr["patient_name"]} | {tr["label"]} ({tr["confidence"]:.0f}%)')
+                        for k, v in feats.items():
+                            print(f'   {k:<22s}: {v:.4f}')
+ 
+                        if tr['patient_id'] != 'unknown':
+                            log_session(tr['patient_id'], tr['patient_name'],
+                                        feats, tr['label'], tr['confidence'])
+                            print(f'  💾 Logged: {tr["patient_name"]} — {tr["label"]}')
+ 
 
                         print(f'\n👤 {tr["patient_name"]} | {tr["label"]} ({tr["confidence"]:.0f}%)')
                         for k, v in feats.items():

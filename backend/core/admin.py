@@ -70,3 +70,23 @@ class ScheduleEventAdmin(admin.ModelAdmin):
     list_filter = ('expected_zone', 'start_time', 'end_time')
     search_fields = ('name',)
     filter_horizontal = ('expected_residents',)
+
+#medications
+from .models import Medication, MedicationLog, AdherenceRiskScore
+
+@admin.register(Medication)
+class MedicationAdmin(admin.ModelAdmin):
+    list_display = ['resident', 'name', 'dosage', 'frequency', 'scheduled_time', 'is_active']
+    list_filter = ['frequency', 'is_active']
+    search_fields = ['resident__name', 'name']
+
+@admin.register(MedicationLog)
+class MedicationLogAdmin(admin.ModelAdmin):
+    list_display = ['resident', 'medication', 'status', 'scheduled_at', 'logged_by']
+    list_filter = ['status']
+    search_fields = ['resident__name', 'medication__name']
+
+@admin.register(AdherenceRiskScore)
+class AdherenceRiskScoreAdmin(admin.ModelAdmin):
+    list_display = ['resident', 'score', 'risk_level', 'predicted_for', 'contributing_factors']
+    list_filter = ['risk_level', 'model_version']

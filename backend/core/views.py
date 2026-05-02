@@ -3,6 +3,11 @@ import json as _json
 import random as _rnd
 import subprocess
 import sys
+import pickle
+import numpy as np
+from datetime import date, timedelta
+from django.utils.dateparse import parse_datetime
+
 from pathlib import Path
 from datetime import datetime, timedelta
 from django.db.models import Q
@@ -19,6 +24,7 @@ from django.utils import timezone
 from .models import (
     HealthMetric, Incident, Resident, CustomUser, IsolationSession,
     IsolationEvent, MealTime, Notification, Zone, GaitObservation,
+    Medication, MedicationLog, AdherenceRiskScore,Incident,Zone
 )
 from .serializers import (
     HealthMetricIngestSerializer,
@@ -1310,3 +1316,428 @@ def aggression_stream_feed(request):
         engine.generate_mjpeg(),
         content_type='multipart/x-mixed-replace; boundary=frame',
     )
+
+# ─────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────
+
+def _residents_for_user(user):
+    """Reuse the same access control logic as the rest of the app."""
+    if user.role == CustomUser.RoleChoices.ADMIN:
+        return Resident.objects.all()
+    elif user.role == CustomUser.RoleChoices.CAREGIVER:
+        return user.assigned_residents.all()
+    else:
+        return user.family_residents.all()
+
+
+def _serialize_medication(med):
+    return {
+        'id':             med.id,
+        'name':           med.name,
+        'dosage':         med.dosage,
+        'frequency':      med.frequency,
+        'scheduled_time': str(med.scheduled_time),
+        'scheduled_time_2': str(med.scheduled_time_2) if med.scheduled_time_2 else None,
+        'scheduled_time_3': str(med.scheduled_time_3) if med.scheduled_time_3 else None,
+        'is_active':      med.is_active,
+        'notes':          med.notes,
+    }
+
+
+def _serialize_log(log):
+    return {
+        'id':               log.id,
+        'resident_id':      log.resident.id,
+        'resident_name':    log.resident.name,
+        'medication_id':    log.medication.id,
+        'medication_name':  log.medication.name,
+        'scheduled_at': log.scheduled_at.isoformat() if hasattr(log.scheduled_at, 'isoformat') else str(log.scheduled_at),
+        'actual_taken_at':  log.actual_taken_at.isoformat() if log.actual_taken_at and hasattr(log.actual_taken_at, 'isoformat') else str(log.actual_taken_at) if log.actual_taken_at else None,
+        'status':           log.status,
+        'logged_by':        log.logged_by.username if log.logged_by else None,
+        'notes':            log.notes,
+        'created_at':       log.created_at.isoformat(),
+    }
+
+
+def _serialize_risk_score(score):
+    return {
+        'id':                    score.id,
+        'resident_id':           score.resident.id,
+        'resident_name':         score.resident.name,
+        'room_number':           score.resident.room_number,
+        'score':                 round(score.score, 3),
+        'risk_level':            score.risk_level,
+        'risk_color':            score.risk_color,
+        'predicted_for':         score.predicted_for.isoformat(),
+        'model_version':         score.model_version,
+        'contributing_factors':  score.contributing_factors,
+        'features': {
+            'adherence_rate_7d':     score.adherence_rate_7d,
+            'adherence_rate_30d':    score.adherence_rate_30d,
+            'meal_skips_7d':         score.meal_skips_7d,
+            'gait_abnormal_days_7d': score.gait_abnormal_days_7d,
+            'isolation_days_7d':     score.isolation_days_7d,
+            'days_since_last_fall':  score.days_since_last_fall,
+        },
+    }
+
+
+
+def _compute_rule_based_score(resident):
+    """
+    Predicts: Will this resident REFUSE their medication today?
+    Uses XGBoost refusal model if refusal_model.pkl exists.
+    Falls back to rule-based if not found.
+    """
+    from .models import GaitObservation, IsolationSession, HealthMetric
+
+    today    = date.today()
+    week_ago = today - timedelta(days=7)
+
+    # ── Feature 1: social_score_avg_7d ───────────────────────
+    social_entries = HealthMetric.objects.filter(
+        resident=resident,
+        metric_type='SOCIAL_SCORE',
+        timestamp__date__gte=week_ago,
+    ).values_list('value', flat=True)
+    social_avg = float(np.mean(list(social_entries))) if social_entries.exists() else 50.0
+
+    # ── Feature 2: social_score_trend ────────────────────────
+    two_weeks_ago = today - timedelta(days=14)
+    older_social = HealthMetric.objects.filter(
+        resident=resident,
+        metric_type='SOCIAL_SCORE',
+        timestamp__date__gte=two_weeks_ago,
+        timestamp__date__lt=week_ago,
+    ).values_list('value', flat=True)
+    social_prev = float(np.mean(list(older_social))) if older_social.exists() else social_avg
+    social_trend = round(social_avg - social_prev, 2)
+
+    # ── Feature 3: isolation_days_7d ─────────────────────────
+    isolation_days = IsolationSession.objects.filter(
+        resident=resident,
+        uploaded_at__date__gte=week_ago,
+        isolation_score__gte=60,
+    ).count()
+
+    # ── Feature 4: gait_abnormal_days_7d ─────────────────────
+    gait_abnormal_days = GaitObservation.objects.filter(
+        resident=resident,
+        label='abnormal',
+        recorded_at__date__gte=week_ago,
+    ).values('recorded_at__date').distinct().count()
+
+    # ── Feature 5: recent_fall ───────────────────────────────
+    recent_fall = int(Incident.objects.filter(
+        resident=resident,
+        type='FALL',
+        timestamp__date__gte=week_ago,
+    ).exists())
+
+    # ── Feature 6: recent_fight ──────────────────────────────
+    recent_fight = int(Incident.objects.filter(
+        resident=resident,
+        type='AGGRESSION',
+        timestamp__date__gte=week_ago,
+    ).exists())
+
+    # ── Feature 7: past_refusal_rate ─────────────────────────
+    total_logs   = MedicationLog.objects.filter(resident=resident).count()
+    refused_logs = MedicationLog.objects.filter(resident=resident, status='refused').count()
+    past_refusal_rate = round(refused_logs / total_logs, 3) if total_logs > 0 else 0.0
+
+    # ── Feature 8 & 9: age, day_of_week ──────────────────────
+    age         = getattr(resident, 'age', 80)
+    day_of_week = today.weekday()
+
+    features = {
+        'social_score_avg_7d':   social_avg,
+        'social_score_trend':    social_trend,
+        'isolation_days_7d':     isolation_days,
+        'gait_abnormal_days_7d': gait_abnormal_days,
+        'recent_fall':           recent_fall,
+        'recent_fight':          recent_fight,
+        'past_refusal_rate':     past_refusal_rate,
+        'age':                   age,
+        'day_of_week':           day_of_week,
+    }
+
+
+    # ── Fallback: rule-based ──────────────────────────────────
+    score   = 0.0
+    factors = []
+
+    if social_avg < 40:
+        score += 0.30
+        factors.append('low_social_score')
+    if social_trend < -5:
+        score += 0.20
+        factors.append('declining_mood')
+    if isolation_days >= 2:
+        score += 0.15
+        factors.append('social_isolation')
+    if gait_abnormal_days >= 2:
+        score += 0.15
+        factors.append('gait_decline')
+    if recent_fall:
+        score += 0.10
+        factors.append('recent_fall')
+    if recent_fight:
+        score += 0.10
+        factors.append('recent_fight')
+
+    return (min(round(score, 3), 1.0), factors, features)
+
+def _risk_level_from_score(score):
+    if score >= 0.6:
+        return 'high'
+    elif score >= 0.35:
+        return 'medium'
+    return 'low'
+
+
+# ─────────────────────────────────────────────────────────────
+# Medication CRUD Views
+# ─────────────────────────────────────────────────────────────
+
+class MedicationListCreateView(views.APIView):
+    """
+    GET  /api/medication/residents/<resident_id>/  → list medications for a resident
+    POST /api/medication/residents/<resident_id>/  → add a new medication
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, resident_id):
+        resident = get_object_or_404(Resident, id=resident_id)
+        allowed = _residents_for_user(request.user)
+        if not allowed.filter(id=resident.id).exists():
+            return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+        meds = Medication.objects.filter(resident=resident, is_active=True)
+        return Response([_serialize_medication(m) for m in meds], status=status.HTTP_200_OK)
+
+    def post(self, request, resident_id):
+        # Only admins and caregivers can add medications
+        if request.user.role == CustomUser.RoleChoices.FAMILY:
+            return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+        resident = get_object_or_404(Resident, id=resident_id)
+
+        med = Medication.objects.create(
+            resident=resident,
+            name=request.data.get('name', ''),
+            dosage=request.data.get('dosage', ''),
+            frequency=request.data.get('frequency', 'once_daily'),
+            scheduled_time=request.data.get('scheduled_time'),
+            scheduled_time_2=request.data.get('scheduled_time_2'),
+            scheduled_time_3=request.data.get('scheduled_time_3'),
+            notes=request.data.get('notes', ''),
+        )
+        return Response(_serialize_medication(med), status=status.HTTP_201_CREATED)
+
+
+# ─────────────────────────────────────────────────────────────
+# Medication Log Views (nurse logging)
+# ─────────────────────────────────────────────────────────────
+
+class MedicationLogCreateView(views.APIView):
+    """
+    POST /api/medication/log/
+    Nurse logs a medication event (taken, missed, late, refused).
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if request.user.role == CustomUser.RoleChoices.FAMILY:
+            return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+        resident = get_object_or_404(Resident, id=request.data.get('resident_id'))
+        medication = get_object_or_404(Medication, id=request.data.get('medication_id'))
+        log_status = request.data.get('status', 'taken')
+
+        log = MedicationLog.objects.create(
+            resident=resident,
+            medication=medication,
+            scheduled_at=parse_datetime(request.data.get('scheduled_at')) or timezone.now(),
+            actual_taken_at=parse_datetime(request.data.get('actual_taken_at')) if request.data.get('actual_taken_at') else None,
+            status=log_status,
+            logged_by=request.user,
+            notes=request.data.get('notes', ''),
+        )
+
+        # If missed or refused → create an Incident + Notification automatically
+        if log_status in ['missed', 'refused']:
+            default_zone = Zone.objects.first()  # fallback zone
+            incident = Incident.objects.create(
+                resident=resident,
+                zone=default_zone,
+                type='MEDICATION_MISSED',
+                severity='MEDIUM',
+                description=f"{resident.name} {log_status} {medication.name} scheduled at {log.scheduled_at}",
+            )
+            Notification.objects.create(
+                message=f"⚠️ {resident.name} {log_status} their {medication.name} dose.",
+                notification_type='HEALTH',
+                user=resident.assigned_caregiver,
+                incident=incident,
+                resident=resident,
+            )
+
+        return Response(_serialize_log(log), status=status.HTTP_201_CREATED)
+
+
+class MedicationLogListView(views.APIView):
+    """
+    GET /api/medication/log/<resident_id>/          → full history
+    GET /api/medication/log/<resident_id>/?days=7   → last N days
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, resident_id):
+        resident = get_object_or_404(Resident, id=resident_id)
+        allowed = _residents_for_user(request.user)
+        if not allowed.filter(id=resident.id).exists():
+            return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+        days = int(request.query_params.get('days', 30))
+        since = timezone.now() - timedelta(days=days)
+        logs = MedicationLog.objects.filter(
+            resident=resident,
+            scheduled_at__gte=since
+        ).order_by('-scheduled_at')
+
+        return Response([_serialize_log(l) for l in logs], status=status.HTTP_200_OK)
+
+
+# ─────────────────────────────────────────────────────────────
+# Adherence Risk Score Views
+# ─────────────────────────────────────────────────────────────
+
+class AdherenceRiskTodayView(views.APIView):
+    """
+    GET /api/adherence/risk/today/
+    Returns today's risk scores for all residents the user can access.
+    Sorted: high → medium → low.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        today = date.today()
+        allowed = _residents_for_user(request.user)
+
+        scores = AdherenceRiskScore.objects.filter(
+            predicted_for=today,
+            resident__in=allowed
+        ).select_related('resident').order_by('-score')
+
+        # If scores haven't been generated yet today, compute on the fly
+        if not scores.exists():
+            generated = []
+            for resident in allowed:
+                score_val, factors, features = _compute_rule_based_score(resident)
+                risk = _risk_level_from_score(score_val)
+                obj, _ = AdherenceRiskScore.objects.update_or_create(
+                    resident=resident,
+                    predicted_for=today,
+                    defaults={
+                        'score':                 score_val,
+                        'risk_level':            risk,
+                        'model_version': 'rule_based',
+                        'contributing_factors':  factors,
+                        'adherence_rate_7d':     features.get('social_score_avg_7d', 0.0),
+                        'adherence_rate_30d':    features.get('social_score_trend', 0.0),
+                        'meal_skips_7d':         features.get('isolation_days_7d', 0),
+                        'gait_abnormal_days_7d': features.get('gait_abnormal_days_7d', 0),
+                        'isolation_days_7d':     features.get('isolation_days_7d', 0),
+                        'days_since_last_fall':  features.get('recent_fall', 0),
+                    }
+                )
+                generated.append(obj)
+            return Response([_serialize_risk_score(s) for s in generated], status=status.HTTP_200_OK)
+
+        return Response([_serialize_risk_score(s) for s in scores], status=status.HTTP_200_OK)
+
+
+class AdherenceRiskHistoryView(views.APIView):
+    """
+    GET /api/adherence/risk/<resident_id>/
+    Returns risk score history for one resident (last 30 days).
+    Used for the trend chart in the frontend.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, resident_id):
+        resident = get_object_or_404(Resident, id=resident_id)
+        allowed = _residents_for_user(request.user)
+        if not allowed.filter(id=resident.id).exists():
+            return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+        scores = AdherenceRiskScore.objects.filter(
+            resident=resident
+        ).order_by('-predicted_for')[:30]
+
+        return Response([_serialize_risk_score(s) for s in scores], status=status.HTTP_200_OK)
+
+
+class RunAdherencePredictionView(views.APIView):
+    """
+    POST /api/adherence/run/
+    Admin-only: manually trigger the prediction pipeline for all residents.
+    (Normally this runs automatically via a nightly management command.)
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if request.user.role != CustomUser.RoleChoices.ADMIN:
+            return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
+
+        today = date.today()
+        residents = Resident.objects.all()
+        results = []
+
+        for resident in residents:
+            score_val, factors, features = _compute_rule_based_score(resident)
+            risk = _risk_level_from_score(score_val)
+
+            obj, created = AdherenceRiskScore.objects.update_or_create(
+                resident=resident,
+                predicted_for=today,
+                defaults={
+                    'score':                 score_val,
+                    'risk_level':            risk,
+                    'model_version': 'rule_based',
+                    'contributing_factors':  factors,
+                    'adherence_rate_7d':     features.get('social_score_avg_7d', 0.0),
+                    'adherence_rate_30d':    features.get('social_score_trend', 0.0),
+                    'meal_skips_7d':         features.get('isolation_days_7d', 0),
+                    'gait_abnormal_days_7d': features.get('gait_abnormal_days_7d', 0),
+                    'isolation_days_7d':     features.get('isolation_days_7d', 0),
+                    'days_since_last_fall':  features.get('recent_fall', 0),
+                }
+            )
+
+            # Auto-notify caregiver if high risk
+            if risk == 'high' and resident.assigned_caregiver:
+                Notification.objects.create(
+                    message=f"🔴 {resident.name} is at HIGH risk of missing medication today. Factors: {', '.join(factors)}",
+                    notification_type='HEALTH',
+                    user=resident.assigned_caregiver,
+                    resident=resident,
+                )
+
+            results.append(_serialize_risk_score(obj))
+
+        return Response({
+            'generated': len(results),
+            'date': today.isoformat(),
+            'results': results,
+        }, status=status.HTTP_200_OK)
+

@@ -4,7 +4,7 @@ import axios from 'axios';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import {
   LogOut, Activity, AlertCircle, ShieldAlert, Users, HeartPulse, Video,
-  Eye, Brain, UtensilsCrossed, Clock3, Plus, Pencil, Trash2, CheckCircle2, Sparkles,
+  Eye, Brain, UtensilsCrossed, Clock3, Plus, Pencil, Trash2, CheckCircle2, Sparkles,Pill
 } from 'lucide-react';
 import SocialInteraction from './SocialInteraction';
 import WanderingDetection from './WanderingDetection';
@@ -13,6 +13,8 @@ import NotificationBell from '../components/NotificationBell';
 import GaitAnalysisPanel from '../components/GaitAnalysisPanel';
 import ChatbotWidget from '../components/ChatbotWidget';
 import { mealService } from '../services/mealService';
+import MedicationPanel from '../components/MedicationPanel';
+
 
 const API_HOST = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
 const API_BASE = `http://${API_HOST}:8000/api`;
@@ -737,6 +739,8 @@ function StaffDashboard({ token, onLogout, role }) {
             <li><button type="button" onClick={() => setStaffSection('livefeed')} style={navBtn(staffSection === 'livefeed')} {...sidebarBtnHoverHandlers}><Video size={18} /> Live Feed</button></li>
             <li><button type="button" onClick={() => setStaffSection('combi')} style={navBtn(staffSection === 'combi')} {...sidebarBtnHoverHandlers}><Brain size={18} /> Social Interaction</button></li>
             <li><button type="button" onClick={() => setStaffSection('wandering')} style={navBtn(staffSection === 'wandering')} {...sidebarBtnHoverHandlers}><Sparkles size={18} /> Wandering Detection</button></li>
+            <li><button type="button" onClick={() => setStaffSection('medication')} style={navBtn(staffSection === 'medication')}><Pill size={18} /> Medication Risk</button></li>
+           
           </ul>
         </nav>
         <div style={logoutDockStyle}>
@@ -790,6 +794,8 @@ function StaffDashboard({ token, onLogout, role }) {
 
             {staffSection === 'gait' ? (
               <GaitAnalysisPanel token={token} onLogout={onLogout} />
+            ) : staffSection === 'medication' ? (
+            <MedicationPanel token={token} onLogout={onLogout} />
             ) : staffSection === 'meals' ? (
               <MealManagementPanel token={token} role={role} incidents={facilityIncidents} onLogout={onLogout} />
             ) : staffSection === 'livefeed' ? (
@@ -942,6 +948,22 @@ function StaffDashboard({ token, onLogout, role }) {
                         }) : <li style={{ color: 'var(--text-light)' }}>No recent incidents.</li>}
                       </ul>
                     </div>
+                    {/* Medications */}
+                    {resident.medications && resident.medications.length > 0 && (
+                      <div style={{ marginTop: '1rem' }}>
+                        <p style={{ margin: 0, fontWeight: 'bold', color: 'var(--midnight-green)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          💊 Medications
+                        </p>
+                        <ul style={{ listStyle: 'none', padding: 0, margin: '0.5rem 0 0 0', fontSize: '0.85rem' }}>
+                          {resident.medications.map((med, idx) => (
+                            <li key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem', padding: '0.4rem 0.6rem', backgroundColor: 'var(--alice-blue)', borderRadius: '6px' }}>
+                              <span>{med.name} {med.dosage} — {med.scheduled_time}</span>
+                              <span>{med.last_status === 'taken' ? '✅' : med.last_status === 'missed' ? '❌' : med.last_status === 'refused' ? '🚫' : '—'}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        </div>
+                    )}
                   </div>
                 ))}
               </div>

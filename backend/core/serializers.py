@@ -127,18 +127,46 @@ class IncidentSerializer(serializers.ModelSerializer):
 class ResidentDashboardSerializer(serializers.ModelSerializer):
     metrics = serializers.SerializerMethodField()
     incidents = serializers.SerializerMethodField()
+    medications = serializers.SerializerMethodField()
 
     class Meta:
         model = Resident
-        fields = ['id', 'name', 'age', 'room_number', 'risk_level', 'metrics', 'incidents']
+        fields = ['id', 'name', 'age', 'room_number', 'risk_level', 'metrics', 'incidents', 'medications']
 
     def get_metrics(self, obj):
-        recent = obj.metrics.order_by('-timestamp')[:5]
+        gait_obs = obj.gait_observations.order_by('-recorded_at')[:3]
+        if gait_obs.exists():
+            return [
+                {
+                    'metric_type': 'GAIT_SPEED',
+                    'metric_type_display': 'Gait Speed',
+                    'value': round(obs.walking_speed, 2),
+                    'timestamp': obs.recorded_at.isoformat(),
+                    'label': obs.label,
+                    'confidence': round(obs.confidence, 1),
+                }
+                for obs in gait_obs
+            ]
+        recent = obj.metrics.order_by('-timestamp')[:3]
         return HealthMetricSerializer(recent, many=True).data
+
 
     def get_incidents(self, obj):
         recent = obj.incidents.order_by('-timestamp')[:5]
         return IncidentSerializer(recent, many=True).data
+    
+    def get_medications(self, obj):
+        meds = obj.medications.filter(is_active=True).order_by('scheduled_time')
+        result = []
+        for med in meds:
+            last_log = med.logs.order_by('-scheduled_at').first()
+            result.append({
+                'name': med.name,
+                'dosage': med.dosage,
+                'scheduled_time': str(med.scheduled_time),
+                'last_status': last_log.status if last_log else None,
+            })
+        return result
 
 
 class MealTimeSerializer(serializers.ModelSerializer):
