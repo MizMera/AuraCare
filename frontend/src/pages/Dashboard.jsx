@@ -15,8 +15,9 @@ import GaitAnalysisPanel from '../components/GaitAnalysisPanel';
 import ChatbotWidget from '../components/ChatbotWidget';
 import { mealService } from '../services/mealService';
 import MedicationPanel from '../components/MedicationPanel';
-
-
+import MealAttendance from './MealAttendance';
+import { VoiceRecorder, ReportsDashboard } from '../components/ShiftHandover';
+import ShiftManagement from '../components/Admin/ShiftManagement';
 const API_HOST = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
 const API_BASE = `http://${API_HOST}:8000/api`;
 
@@ -116,491 +117,7 @@ function getIncidentColor(type) {
   return INCIDENT_COLORS[type] || DEFAULT_COLOR;
 }
 
-function MealManagementPanel({ token, role, incidents, onLogout }) {
-  const [meals, setMeals] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [editingMealId, setEditingMealId] = useState(null);
-  const [form, setForm] = useState({ name: 'Breakfast', time: '08:00', expected_people: 4 });
-  const formCardRef = useRef(null);
-  const mealNameInputRef = useRef(null);
-  const [cameraRunning, setCameraRunning] = useState(false);
-  const [cameraLoading, setCameraLoading] = useState(false);
-  const [cameraError, setCameraError] = useState('');
-  const [cameraStatus, setCameraStatus] = useState({
-    count: 0,
-    active_meal: null,
-    expected_people: null,
-    mismatch: false,
-    missing_count: 0,
-    model: 'yolo-bestt',
-  });
-  const [cameraStreamKey, setCameraStreamKey] = useState(0);
-  const cameraPollRef = useRef(null);
 
-  const loadMeals = async () => {
-    try {
-      setErrorMsg('');
-      const data = await mealService.getAll(token);
-      setMeals(data || []);
-    } catch (err) {
-      if (err.response?.status === 401) onLogout();
-      else setErrorMsg('Unable to load the meal schedule right now.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadMeals();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => () => {
-    if (cameraPollRef.current) {
-      window.clearInterval(cameraPollRef.current);
-    }
-  }, []);
-
-  const resetForm = () => {
-    setEditingMealId(null);
-    setForm({ name: 'Breakfast', time: '08:00', expected_people: 4 });
-  };
-
-  const beginEditingMeal = (meal) => {
-    setEditingMealId(meal.id);
-    setErrorMsg('');
-    setForm({
-      name: meal.name,
-      time: meal.time?.slice(0, 5) || '08:00',
-      expected_people: meal.expected_people,
-    });
-
-    window.requestAnimationFrame(() => {
-      formCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      mealNameInputRef.current?.focus();
-      mealNameInputRef.current?.select();
-    });
-  };
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setSaving(true);
-    setErrorMsg('');
-    try {
-      const payload = {
-        name: form.name.trim(),
-        time: form.time,
-        expected_people: Number(form.expected_people),
-      };
-      if (editingMealId) await mealService.update(editingMealId, payload, token);
-      else await mealService.create(payload, token);
-      await loadMeals();
-      resetForm();
-    } catch (err) {
-      if (err.response?.status === 401) onLogout();
-      else if (err.response?.data) {
-        const message = Object.values(err.response.data).flat().join(' ');
-        setErrorMsg(message || 'Unable to save this meal schedule.');
-      } else {
-        setErrorMsg('Unable to save this meal schedule.');
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async (mealId) => {
-    if (!window.confirm('Delete this meal slot from the schedule?')) return;
-    try {
-      await mealService.delete(mealId, token);
-      await loadMeals();
-      if (editingMealId === mealId) resetForm();
-    } catch (err) {
-      if (err.response?.status === 401) onLogout();
-      else setErrorMsg('Unable to delete this meal slot.');
-    }
-  };
-
-  const handleStartCamera = async () => {
-    setCameraLoading(true);
-    setCameraError('');
-    try {
-      setCameraRunning(true);
-      setCameraStreamKey((current) => current + 1);
-      setCameraStatus((current) => ({
-        ...current,
-        model: 'yolo-bestt',
-      }));
-    } finally {
-      setCameraLoading(false);
-    }
-  };
-
-  const handleStopCamera = async () => {
-    setCameraLoading(true);
-    try {
-      if (cameraPollRef.current) {
-        window.clearInterval(cameraPollRef.current);
-        cameraPollRef.current = null;
-      }
-      setCameraRunning(false);
-      setCameraError('');
-      setCameraStatus((current) => ({
-        ...current,
-        count: 0,
-        active_meal: null,
-        expected_people: null,
-        mismatch: false,
-        missing_count: 0,
-      }));
-      setCameraStreamKey((current) => current + 1);
-    } finally {
-      setCameraLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!cameraRunning) return undefined;
-    const buildActiveMealSnapshot = (count) => {
-      const now = new Date();
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
-      const activeMeal = meals.find((meal) => {
-        if (!meal?.time) return false;
-        const [hours, minutes] = meal.time.split(':');
-        const mealMinutes = Number(hours) * 60 + Number(minutes);
-        const diff = currentMinutes - mealMinutes;
-        return diff >= 0 && diff <= 30;
-      });
-
-      if (!activeMeal) {
-        return {
-          active_meal: null,
-          expected_people: null,
-          mismatch: false,
-          missing_count: 0,
-        };
-      }
-
-      const expected = activeMeal.expected_people || 0;
-      return {
-        active_meal: {
-          id: activeMeal.id,
-          name: activeMeal.name,
-          time: activeMeal.time,
-        },
-        expected_people: expected,
-        mismatch: count < expected,
-        missing_count: Math.max(0, expected - count),
-      };
-    };
-
-    const pollCameraStatus = async () => {
-      try {
-        const countResponse = await axios.get(`${API_BASE}/person-count/`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        const count = typeof countResponse.data?.count === 'number' ? countResponse.data.count : 0;
-        setCameraStatus((current) => ({
-          ...current,
-          count,
-          model: 'yolo-bestt',
-          ...buildActiveMealSnapshot(count),
-        }));
-        setCameraError('');
-      } catch (err) {
-        if (err.response?.status === 401) {
-          onLogout();
-        } else {
-          const backendMessage = err.response?.data?.error;
-          setCameraError(backendMessage || 'Unable to read the person-count stream.');
-        }
-      }
-    };
-
-    pollCameraStatus();
-    cameraPollRef.current = window.setInterval(pollCameraStatus, 1500);
-
-    return () => {
-      if (cameraPollRef.current) {
-        window.clearInterval(cameraPollRef.current);
-        cameraPollRef.current = null;
-      }
-    };
-  }, [cameraRunning, token, onLogout, meals]);
-
-  const mealAlerts = incidents.filter((incident) => incident.type === 'ABSENCE' || incident.meal_name);
-  const totalExpected = meals.reduce((sum, meal) => sum + (meal.expected_people || 0), 0);
-
-  if (loading) {
-    return <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--midnight-green)' }}><h2>Loading meal coordination...</h2></div>;
-  }
-
-  return (
-    <div style={{ display: 'grid', gap: '1.5rem' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-        <div style={{ ...sectionCardStyle, borderTop: '4px solid var(--moonstone)' }}>
-          <p style={{ margin: 0, color: 'var(--text-light)', fontWeight: 600 }}>Scheduled Meals</p>
-          <h2 style={{ margin: '0.45rem 0 0', color: 'var(--midnight-green)', fontSize: '2rem' }}>{meals.length}</h2>
-          <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)', fontSize: '0.9rem' }}>Shared daily meal checkpoints</p>
-        </div>
-        <div style={{ ...sectionCardStyle, borderTop: '4px solid #0EA5E9' }}>
-          <p style={{ margin: 0, color: 'var(--text-light)', fontWeight: 600 }}>Expected Attendance</p>
-          <h2 style={{ margin: '0.45rem 0 0', color: 'var(--midnight-green)', fontSize: '2rem' }}>{totalExpected}</h2>
-          <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)', fontSize: '0.9rem' }}>Residents planned across all meals</p>
-        </div>
-        <div style={{ ...sectionCardStyle, borderTop: '4px solid #F59E0B' }}>
-          <p style={{ margin: 0, color: 'var(--text-light)', fontWeight: 600 }}>Absence Alerts</p>
-          <h2 style={{ margin: '0.45rem 0 0', color: '#B45309', fontSize: '2rem' }}>{mealAlerts.length}</h2>
-          <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)', fontSize: '0.9rem' }}>Meal-linked incidents detected so far</p>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: role === 'ADMIN' ? '1.7fr 1fr' : '1fr', gap: '1.5rem' }}>
-        <section style={sectionCardStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-            <div>
-              <h3 style={{ margin: 0, color: 'var(--midnight-green)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <UtensilsCrossed size={18} color="var(--moonstone)" /> Meal Module
-              </h3>
-              <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)' }}>
-                Structured meal timing and absence monitoring, restyled to match the current dashboard.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={loadMeals}
-              style={{ border: 'none', borderRadius: '999px', padding: '10px 16px', backgroundColor: 'var(--alice-blue)', color: 'var(--midnight-green)', fontWeight: 700, cursor: 'pointer' }}
-            >
-              Refresh Schedule
-            </button>
-          </div>
-
-          {meals.length > 0 ? (
-            <div style={{ display: 'grid', gap: '0.9rem' }}>
-              {meals.map((meal) => (
-                <article key={meal.id} style={{ border: '1px solid #DCE9EF', borderRadius: '18px', padding: '1rem 1.1rem', background: 'linear-gradient(180deg, #FFFFFF 0%, #F8FBFD 100%)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
-                    <div>
-                      <h4 style={{ margin: 0, color: 'var(--midnight-green)' }}>{meal.name}</h4>
-                      <p style={{ margin: '0.4rem 0 0', color: 'var(--text-light)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <Clock3 size={15} /> {meal.time?.slice(0, 5)} {meal.zone_name ? `• ${meal.zone_name}` : '• Auto dining zone'}
-                      </p>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
-                      <span style={{ padding: '6px 12px', borderRadius: '999px', backgroundColor: '#E0F2FE', color: '#075985', fontSize: '0.85rem', fontWeight: 700 }}>
-                        {meal.expected_people} expected
-                      </span>
-                      {role === 'ADMIN' && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => beginEditingMeal(meal)}
-                            style={{ border: 'none', background: 'transparent', color: 'var(--midnight-green)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 700 }}
-                          >
-                            <Pencil size={15} /> Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(meal.id)}
-                            style={{ border: 'none', background: 'transparent', color: '#DC2626', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 700 }}
-                          >
-                            <Trash2 size={15} /> Delete
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div style={{ borderRadius: '18px', backgroundColor: 'var(--alice-blue)', padding: '2rem', textAlign: 'center' }}>
-              <UtensilsCrossed size={30} color="var(--moonstone)" style={{ marginBottom: '0.75rem', opacity: 0.8 }} />
-              <p style={{ margin: 0, color: 'var(--midnight-green)', fontWeight: 700 }}>No meal schedule yet</p>
-              <p style={{ margin: '0.45rem 0 0', color: 'var(--text-light)' }}>
-                Add the first meal slot to activate the absence workflow.
-              </p>
-            </div>
-          )}
-        </section>
-
-        {role === 'ADMIN' && (
-          <aside ref={formCardRef} style={{ ...sectionCardStyle, alignSelf: 'start', border: editingMealId ? '2px solid #44A6B5' : '2px solid transparent', transition: 'border-color 0.2s ease' }}>
-            <h3 style={{ margin: '0 0 0.35rem 0', color: 'var(--midnight-green)' }}>
-              {editingMealId ? 'Edit Meal Slot' : 'Add Meal Slot'}
-            </h3>
-            <p style={{ margin: '0 0 1.25rem 0', color: 'var(--text-light)' }}>
-              Keep the attendance model configured from the main admin experience.
-            </p>
-
-            {editingMealId && (
-              <div style={{ marginBottom: '1rem', borderRadius: '14px', backgroundColor: '#ECFEFF', color: '#155E75', padding: '0.9rem 1rem', fontWeight: 700 }}>
-                Editing an existing meal slot. Update the fields below, then save.
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '1rem' }}>
-              <label>
-                <span style={formLabelStyle}>Meal Name</span>
-                <input ref={mealNameInputRef} value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Breakfast" style={formInputStyle} required />
-              </label>
-
-              <label>
-                <span style={formLabelStyle}>Scheduled Time</span>
-                <input type="time" value={form.time} onChange={(event) => setForm((current) => ({ ...current, time: event.target.value }))} style={formInputStyle} required />
-              </label>
-
-              <label>
-                <span style={formLabelStyle}>Expected Residents</span>
-                <input type="number" min="1" value={form.expected_people} onChange={(event) => setForm((current) => ({ ...current, expected_people: event.target.value }))} style={formInputStyle} required />
-              </label>
-
-              {errorMsg && <div style={{ borderRadius: '14px', backgroundColor: '#FEF2F2', color: '#B91C1C', padding: '0.9rem 1rem', fontWeight: 600 }}>{errorMsg}</div>}
-
-              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  style={{ border: 'none', borderRadius: '12px', padding: '12px 16px', backgroundColor: 'var(--midnight-green)', color: 'white', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.45rem', opacity: saving ? 0.7 : 1 }}
-                >
-                  {editingMealId ? <CheckCircle2 size={16} /> : <Plus size={16} />}
-                  {saving ? 'Saving...' : editingMealId ? 'Update Meal' : 'Create Meal'}
-                </button>
-                {editingMealId && (
-                  <button
-                    type="button"
-                    onClick={resetForm}
-                    style={{ border: '1px solid #D7E3EA', borderRadius: '12px', padding: '12px 16px', backgroundColor: 'white', color: 'var(--midnight-green)', fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-            </form>
-          </aside>
-        )}
-      </div>
-
-      <section style={sectionCardStyle}>
-        <h3 style={{ margin: '0 0 1rem 0', color: 'var(--midnight-green)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <ShieldAlert size={18} color="#F59E0B" /> Meal Alert Feed
-        </h3>
-        {mealAlerts.length > 0 ? (
-          <div style={{ display: 'grid', gap: '0.8rem' }}>
-            {mealAlerts.slice(0, 8).map((incident) => (
-              <div key={incident.id} style={{ borderLeft: '4px solid #F59E0B', backgroundColor: '#FFF7ED', borderRadius: '0 14px 14px 0', padding: '1rem 1.1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                  <strong style={{ color: '#9A3412' }}>{incident.meal_name ? `${incident.meal_name} attendance alert` : incident.type_display}</strong>
-                  <span style={{ fontSize: '0.82rem', color: 'var(--text-light)' }}>{new Date(incident.timestamp).toLocaleString()}</span>
-                </div>
-                <p style={{ margin: '0.4rem 0 0', color: 'var(--text-dark)' }}>
-                  {incident.description || 'A meal attendance discrepancy was detected.'}
-                </p>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p style={{ margin: 0, color: 'var(--text-light)' }}>
-            No meal-related alerts yet. Once absence checks create incidents, they will appear here.
-          </p>
-        )}
-      </section>
-
-      <section style={sectionCardStyle}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-          <div>
-            <h3 style={{ margin: 0, color: 'var(--midnight-green)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Eye size={18} color="var(--moonstone)" /> Meal Attendance Camera
-            </h3>
-            <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)' }}>
-              Live people-count detection integrated into the main meal module.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
-            {!cameraRunning ? (
-              <button
-                type="button"
-                onClick={handleStartCamera}
-                disabled={cameraLoading}
-                style={{ border: 'none', borderRadius: '12px', padding: '12px 18px', backgroundColor: '#059669', color: 'white', fontWeight: 700, cursor: cameraLoading ? 'not-allowed' : 'pointer', opacity: cameraLoading ? 0.7 : 1 }}
-              >
-                {cameraLoading ? 'Starting...' : 'Start Camera'}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleStopCamera}
-                disabled={cameraLoading}
-                style={{ border: 'none', borderRadius: '12px', padding: '12px 18px', backgroundColor: '#DC2626', color: 'white', fontWeight: 700, cursor: cameraLoading ? 'not-allowed' : 'pointer', opacity: cameraLoading ? 0.7 : 1 }}
-              >
-                {cameraLoading ? 'Stopping...' : 'Stop Camera'}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {cameraError && (
-          <div style={{ marginBottom: '1rem', borderRadius: '14px', backgroundColor: '#FEF2F2', color: '#B91C1C', padding: '0.9rem 1rem', fontWeight: 600 }}>
-            {cameraError}
-          </div>
-        )}
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(260px, 1fr)', gap: '1rem' }}>
-          <div style={{ position: 'relative', minHeight: '340px', borderRadius: '18px', overflow: 'hidden', backgroundColor: '#091B2A', border: '1px solid #DCE9EF' }}>
-            {cameraRunning ? (
-              <img
-                key={cameraStreamKey}
-                src={`${API_BASE}/video/stream/?t=${cameraStreamKey}`}
-                alt="Meal attendance stream"
-                onLoad={() => setCameraError('')}
-                onError={() => {
-                  setCameraRunning(false);
-                  setCameraError('Unable to load the video stream. If the aggression stream is active, stop it first, then try again.');
-                }}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', minHeight: '340px' }}
-              />
-            ) : (
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.7)', textAlign: 'center', padding: '2rem' }}>
-                <Video size={54} style={{ marginBottom: '1rem', opacity: 0.7 }} />
-                <p style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Camera idle</p>
-                <p style={{ margin: '0.45rem 0 0', maxWidth: '24rem' }}>
-                  Start the detection stream to count people directly from the backend camera pipeline.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div style={{ display: 'grid', gap: '1rem' }}>
-            <div style={{ borderRadius: '18px', backgroundColor: '#F8FBFD', padding: '1rem 1.1rem', border: '1px solid #DCE9EF' }}>
-              <p style={{ margin: 0, color: 'var(--text-light)', fontWeight: 700 }}>People Detected</p>
-              <h2 style={{ margin: '0.35rem 0 0', color: 'var(--midnight-green)', fontSize: '2rem' }}>{cameraStatus.count ?? 0}</h2>
-              <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)' }}>Detection model: {cameraStatus.model || 'yolo-bestt'}</p>
-            </div>
-
-            <div style={{ borderRadius: '18px', backgroundColor: cameraStatus.mismatch ? '#FFF7ED' : '#ECFDF5', padding: '1rem 1.1rem', border: `1px solid ${cameraStatus.mismatch ? '#F59E0B' : '#A7F3D0'}` }}>
-              <p style={{ margin: 0, color: 'var(--text-light)', fontWeight: 700 }}>Meal Check</p>
-              {cameraStatus.active_meal ? (
-                <>
-                  <h3 style={{ margin: '0.35rem 0 0', color: 'var(--midnight-green)' }}>{cameraStatus.active_meal.name}</h3>
-                  <p style={{ margin: '0.35rem 0 0', color: 'var(--text-dark)' }}>
-                    Detected {cameraStatus.count ?? 0} / Expected {cameraStatus.expected_people ?? 0}
-                  </p>
-                  <p style={{ margin: '0.35rem 0 0', color: cameraStatus.mismatch ? '#B45309' : '#047857', fontWeight: 700 }}>
-                    {cameraStatus.mismatch ? `${cameraStatus.missing_count} resident(s) missing` : 'Count matches the scheduled meal'}
-                  </p>
-                </>
-              ) : (
-                <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)' }}>No meal is currently in its monitoring window.</p>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
 
 function StaffDashboard({ token, onLogout, role }) {
   const [residents, setResidents] = useState(null);
@@ -613,7 +130,10 @@ function StaffDashboard({ token, onLogout, role }) {
   const [streamError, setStreamError] = useState('');
   const [streamKey, setStreamKey] = useState(0);
   const streamPollRef = useRef(null);
-
+  const [refreshKey, setRefreshKey] = useState(0);
+  const handleRecordingSuccess = () => {
+    setRefreshKey(prev => prev + 1);
+  };
   useEffect(() => {
     const fetchStaffDashboard = async () => {
       try {
@@ -743,7 +263,30 @@ function StaffDashboard({ token, onLogout, role }) {
             <li><button type="button" onClick={() => setStaffSection('combi')} style={navBtn(staffSection === 'combi')} {...sidebarBtnHoverHandlers}><Brain size={18} /> Social Interaction</button></li>
             <li><button type="button" onClick={() => setStaffSection('wandering')} style={navBtn(staffSection === 'wandering')} {...sidebarBtnHoverHandlers}><Sparkles size={18} /> Wandering Detection</button></li>
             <li><button type="button" onClick={() => setStaffSection('medication')} style={navBtn(staffSection === 'medication')}><Pill size={18} /> Medication Risk</button></li>
-           
+            {role === 'ADMIN' && (
+              <li>
+                <button type="button" onClick={() => setStaffSection('manageShifts')} style={navBtn(staffSection === 'manageShifts')}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="16"/>
+                    <line x1="8" y1="12" x2="16" y2="12"/>
+                  </svg>
+                  Manage Shifts
+                </button>
+              </li>
+            )}
+            {role === 'CAREGIVER' && (
+              <li>
+                <button type="button" onClick={() => setStaffSection('shiftHandover')} style={navBtn(staffSection === 'shiftHandover')}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '0.5rem' }}>
+                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" y1="19" x2="12" y2="22"/>
+                  </svg>
+                  Shift Handover
+                </button>
+              </li>
+            )}
           </ul>
         </nav>
         <div style={logoutDockStyle}>
@@ -774,33 +317,60 @@ function StaffDashboard({ token, onLogout, role }) {
               description="The combined social-isolation model is now reachable from the caregiver sidebar."
             />
           </div>
-        ) : staffSection === 'wandering' ? (
+        ) :staffSection === 'shiftHandover' && role === 'CAREGIVER' ? (  
+            <div>
+              <header style={{ marginBottom: '3rem' }}>
+                <h1 style={{ color: 'var(--midnight-green)', margin: 0 }}> Shift Handover</h1>
+                <p style={{ color: 'var(--text-light)', margin: 0 }}>Voice-to-Text for caregivers - Record handover notes between shifts</p>
+              </header>
+              <VoiceRecorder onSuccess={handleRecordingSuccess} />
+              <hr style={{ margin: '30px 0' }} />
+              <ReportsDashboard refreshTrigger={refreshKey} />
+            </div>
+        ) :staffSection === 'manageShifts' && role === 'ADMIN' ? (
+          <div>
+            <header style={{ marginBottom: '3rem' }}>
+              <h1 style={{ color: 'var(--midnight-green)', margin: 0 }}> Shift Management</h1>
+              <p style={{ color: 'var(--text-light)', margin: 0 }}>Configure shift hours for the retirement home</p>
+            </header>
+            <ShiftManagement />
+          </div>
+        ):staffSection === 'wandering' ? (
           <div style={{ margin: '-3rem' }}>
             <WanderingDetection token={token} onLogout={onLogout} />
           </div>
         ) : (
           <div>
+          {/* Header - caché pour la page meals */}
+          {staffSection !== 'meals' && (
             <header style={{ marginBottom: '3rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
               <div>
                 <h1 style={{ color: 'var(--midnight-green)', margin: 0 }}>Caregiver Dashboard</h1>
                 <p style={{ color: 'var(--text-light)', margin: 0 }}>
                   {staffSection === 'livefeed' ? 'Monitor live aggression detection feeds' :
                     staffSection === 'gait' ? 'Review gait-analysis results and launch new recordings' :
-                    staffSection === 'meals' ? '' :
-                      staffSection === 'wandering' ? 'Review wandering risk scores, trajectories, and generated reports' :
-                      staffSection === 'incidents' ? 'View all facility incidents and history' :
-                        'Monitor all assigned residents for your shift'}
+                    staffSection === 'wandering' ? 'Review wandering risk scores, trajectories, and generated reports' :
+                    staffSection === 'incidents' ? 'View all facility incidents and history' :
+                      'Monitor all assigned residents for your shift'}
                 </p>
               </div>
               <NotificationBell token={token} compact dropdownAlign="top-right" />
             </header>
+          )}
+
+          {/* Header simplifié pour la page meals - seulement la cloche */}
+          {staffSection === 'meals' && (
+            <header style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+              <NotificationBell token={token} compact dropdownAlign="top-right" />
+            </header>
+          )}
 
             {staffSection === 'gait' ? (
               <GaitAnalysisPanel token={token} onLogout={onLogout} />
             ) : staffSection === 'medication' ? (
             <MedicationPanel token={token} onLogout={onLogout} />
             ) : staffSection === 'meals' ? (
-              <MealManagementPanel token={token} role={role} incidents={facilityIncidents} onLogout={onLogout} />
+              <MealAttendance token={token} role={role} onLogout={onLogout} />
             ) : staffSection === 'livefeed' ? (
               <div style={sectionCardStyle}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>

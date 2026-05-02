@@ -38,14 +38,25 @@ export default function NotificationBell({ token, compact = false, dropdownAlign
         incidentOnly: true,
         todayOnly: true,
       });
-      const unread = todayIncidents.filter((item) => !item.is_read);
+      
+      // 🔧 FILTRER : Supprimer les notifications d'incident "ABSENCE" 
+      // car elles sont déjà dans "Meal Alert"
+      const filteredIncidents = todayIncidents.filter(notif => {
+        // Garder les "Meal Alert" (type ABSENCE)
+        if (notif.notification_type === 'ABSENCE') return true;
+        // Garder les incidents qui ne sont pas de type ABSENCE
+        if (notif.incident?.type === 'ABSENCE') return false;
+        return true;
+      });
+      
+      const unread = filteredIncidents.filter((item) => !item.is_read);
       const newUnread = unread.filter((item) => !playedIdsRef.current.has(item.id));
       if (newUnread.length > 0 && isEnabled) {
         playSound();
         newUnread.forEach((item) => playedIdsRef.current.add(item.id));
         savePlayedIds(playedIdsRef.current);
       }
-      setNotifications(todayIncidents);
+      setNotifications(filteredIncidents);
     } catch (err) {
       setError(err.response?.status === 401 ? 'Session expired.' : 'Notifications unavailable.');
     }

@@ -70,15 +70,16 @@ def check_absence_alert(nb_personnes, _frame=None):
         )
 
     missing_count = max(0, expected - nb_personnes)
-    severity = Incident.SeverityChoices.MEDIUM if missing_count > 0 else Incident.SeverityChoices.MEDIUM
+    
+    # Création de l'incident
     incident = Incident.objects.create(
         type=Incident.IncidentTypeChoices.ABSENCE,
-        severity=severity,
+        severity=Incident.SeverityChoices.MEDIUM if missing_count > 0 else Incident.SeverityChoices.LOW,
         zone=zone,
         meal=meal,
         description=(
-            f"{meal.name}: {nb_personnes}/{expected} people - "
-            f"checked at {timezone.localtime().strftime('%H:%M')}"
+            f"{meal.name}: {nb_personnes}/{expected} residents present - "
+            f"Checked at {timezone.localtime().strftime('%H:%M')}"
         ),
     )
 
@@ -86,18 +87,34 @@ def check_absence_alert(nb_personnes, _frame=None):
         users = CustomUser.objects.filter(
             role__in=[CustomUser.RoleChoices.CAREGIVER, CustomUser.RoleChoices.ADMIN]
         )
+        
+        # Message professionnel
+        if missing_count == 1:
+            message = (
+                f"Attendance Alert – {meal.name}\n"
+                f"• {missing_count} resident is missing\n"
+                f"• Present: {nb_personnes}/{expected}\n"
+                f"• Location: {zone.name}"
+            )
+        else:
+            message = (
+                f"Attendance Alert – {meal.name}\n"
+                f"• {missing_count} residents are missing\n"
+                f"• Present: {nb_personnes}/{expected}\n"
+                f"• Location: {zone.name}"
+            )
+        
         for user in users:
             Notification.objects.create(
-                message=(
-                    f"Meal alert: {missing_count} person(s) missing at {meal.name}! "
-                    f"(Detected: {nb_personnes}/{expected})"
-                ),
+                message=message,
                 notification_type=Notification.NotificationTypeChoices.ABSENCE,
                 status=Notification.StatusChoices.SENT,
                 user=user,
                 incident=incident,
                 meal=meal,
             )
+        
+        print(f" [ATTENDANCE] {meal.name}: {missing_count} absent, {nb_personnes}/{expected} present")
 
     alert_sent_for_meal[meal_id_key] = True
     return incident

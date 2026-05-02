@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from .meal_detection import get_people_detector
 from .models import CustomUser, Incident, MealTime, Notification, Zone
-
+from .utils import get_current_meal, update_person_count, check_absence_alert
 
 class MealAttendanceEngine:
     def __init__(self):
@@ -29,7 +29,6 @@ class MealAttendanceEngine:
             'model': 'hog',
             'last_checked_at': None,
         }
-        self._alerts_sent = {}
         self._detector = get_people_detector()
         self._backend_name = 'uninitialized'
 
@@ -99,7 +98,9 @@ class MealAttendanceEngine:
         if capture:
             capture.release()
         if thread and thread.is_alive():
-            thread.join(timeout=1.0)
+            thread.join(timeout=2.0)
+            if thread.is_alive():
+                thread.daemon = True
         return self.status
 
     def latest_jpeg(self):
@@ -113,7 +114,7 @@ class MealAttendanceEngine:
 
     def _run(self):
         consecutive_failures = 0
-        while True:
+        while self._running:
             with self._lock:
                 if not self._running or self._capture is None:
                     break
@@ -135,7 +136,7 @@ class MealAttendanceEngine:
             consecutive_failures = 0
             annotated, count, _boxes = self._detector.process(frame)
             snapshot = self._build_snapshot(count)
-            self._render_overlay(annotated, snapshot)
+            #self._render_overlay(annotated, snapshot)
 
             with self._lock:
                 self._latest_frame = annotated
@@ -143,8 +144,20 @@ class MealAttendanceEngine:
                 self._last_snapshot = snapshot
                 self._last_error = ''
 
-            self._emit_alert_if_needed(snapshot)
+            # ✅ NOUVEAU : Mise à jour du compteur global
+            update_person_count(count)
+            
+            # ✅ NOUVEAU : Alerte avec logique T+1 minute
+            check_absence_alert(count, annotated)
+            
+            # ❌ ANCIEN : À commenter pour éviter les doublons
+            # self._emit_alert_if_needed(snapshot)
+            
             time.sleep(0.15)
+        with self._lock:
+            if self._capture:
+                self._capture.release()
+                self._capture = None
 
     def _open_capture(self, camera_idx):
         candidates = []
@@ -173,7 +186,7 @@ class MealAttendanceEngine:
 
     def _build_snapshot(self, count):
         now = timezone.localtime()
-        active_meal = self._get_active_meal(now)
+        active_meal = get_current_meal() 
         expected = active_meal.expected_people if active_meal else None
         missing = max(0, (expected or 0) - count) if active_meal else 0
         mismatch = bool(active_meal and count < expected)
@@ -191,68 +204,10 @@ class MealAttendanceEngine:
             'last_checked_at': now.isoformat(),
         }
 
-    def _get_active_meal(self, now):
-        for meal in MealTime.objects.select_related('zone').all():
-            meal_dt = timezone.make_aware(
-                datetime.combine(now.date(), meal.time),
-                timezone.get_current_timezone(),
-            )
-            if meal_dt <= now <= meal_dt + timedelta(minutes=30):
-                return meal
-        return None
 
-    def _emit_alert_if_needed(self, snapshot):
-        active_meal = snapshot.get('active_meal')
-        if not active_meal or not snapshot.get('mismatch'):
-            return
-
-        alert_key = f"{active_meal['id']}:{timezone.localdate().isoformat()}"
-        if self._alerts_sent.get(alert_key):
-            return
-
-        meal = MealTime.objects.select_related('zone').get(id=active_meal['id'])
-        zone = meal.zone or Zone.objects.filter(name__iexact='Dining Hall').first() or Zone.objects.first()
-        if zone is None:
-            zone = Zone.objects.create(name='Dining Hall', type='SOCIAL', floor_type='UNKNOWN')
-
-        incident = Incident.objects.create(
-            type=Incident.IncidentTypeChoices.ABSENCE,
-            severity=Incident.SeverityChoices.MEDIUM,
-            zone=zone,
-            meal=meal,
-            description=(
-                f"Live attendance mismatch for {meal.name}: detected {snapshot['count']} "
-                f"out of {meal.expected_people} expected residents."
-            ),
-        )
-
-        recipients = CustomUser.objects.filter(
-            role__in=[CustomUser.RoleChoices.ADMIN, CustomUser.RoleChoices.CAREGIVER]
-        )
-        for user in recipients:
-            Notification.objects.create(
-                message=(
-                    f"Meal attendance alert for {meal.name}: detected {snapshot['count']} "
-                    f"out of {meal.expected_people} expected residents."
-                ),
-                notification_type=Notification.NotificationTypeChoices.ABSENCE,
-                status=Notification.StatusChoices.SENT,
-                user=user,
-                incident=incident,
-                meal=meal,
-            )
-
-        self._alerts_sent[alert_key] = True
-
+    
     def _render_overlay(self, frame, snapshot):
-        cv2.rectangle(frame, (16, 16), (290, 126), (15, 43, 68), -1)
-        cv2.putText(frame, f"People Detected: {snapshot['count']}", (30, 46), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(frame, f"Model: {snapshot['model']}", (30, 74), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 231, 239), 2)
-        if snapshot['active_meal']:
-            status_text = f"{snapshot['active_meal']['name']}: {snapshot['count']}/{snapshot['expected_people']}"
-            color = (0, 165, 255) if snapshot['mismatch'] else (80, 200, 120)
-            cv2.putText(frame, status_text, (30, 102), cv2.FONT_HERSHEY_SIMPLEX, 0.62, color, 2)
-
+        pass
 
 _ENGINE = MealAttendanceEngine()
 
@@ -273,5 +228,4 @@ def analyse_meal_frame_bytes(frame_bytes):
     detector = get_people_detector()
     _annotated, count, _boxes = detector.process(frame)
     snapshot = _ENGINE._build_snapshot(count)
-    _ENGINE._emit_alert_if_needed(snapshot)
     return snapshot

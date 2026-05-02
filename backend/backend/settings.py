@@ -27,6 +27,7 @@ INSTALLED_APPS = [
 
     # Local apps
     'core',
+    'voice',
 ]
 
 MIDDLEWARE = [

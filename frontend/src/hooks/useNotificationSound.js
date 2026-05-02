@@ -39,19 +39,34 @@ export const useNotificationSound = () => {
       }
     }
 
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(880, context.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(660, context.currentTime + 0.18);
-    gain.gain.setValueAtTime(0.0001, context.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.2);
+    const now = context.currentTime;
+    
+    // Premier bip (aigu - 880 Hz)
+    const osc1 = context.createOscillator();
+    const gain1 = context.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.value = 880;
+    gain1.gain.setValueAtTime(0, now);
+    gain1.gain.linearRampToValueAtTime(0.12, now + 0.01);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    osc1.connect(gain1);
+    gain1.connect(context.destination);
+    osc1.start();
+    osc1.stop(now + 0.15);
 
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + 0.22);
+    // Deuxième bip (plus grave - 660 Hz)
+    const osc2 = context.createOscillator();
+    const gain2 = context.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.value = 660;
+    gain2.gain.setValueAtTime(0, now + 0.2);
+    gain2.gain.linearRampToValueAtTime(0.12, now + 0.21);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc2.connect(gain2);
+    gain2.connect(context.destination);
+    osc2.start(now + 0.2);
+    osc2.stop(now + 0.35);
+
   }, [ensureContext, isEnabled]);
 
   const toggleSound = useCallback(() => {

@@ -23,6 +23,8 @@ urlpatterns = [
     path('api/auth/register/', RegisterUserView.as_view(), name='register_user'),
     path('api/auth/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+
+    path('api/voice/', include('voice.urls')), 
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
