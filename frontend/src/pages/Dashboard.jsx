@@ -1029,7 +1029,6 @@ function FamilyDashboard({ token, onLogout }) {
           <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', listStyle: 'none', padding: 0 }}>
             <li><button onClick={() => setActivePage('overview')} style={navBtn(activePage === 'overview')} {...sidebarBtnHoverHandlers}><Activity size={18} /> Overview</button></li>
             <li><button onClick={() => setActivePage('incidents')} style={navBtn(activePage === 'incidents')} {...sidebarBtnHoverHandlers}><ShieldAlert size={18} /> Incident Logs</button></li>
-            <li><button onClick={() => setActivePage('social')} style={navBtn(activePage === 'social')} {...sidebarBtnHoverHandlers}><Brain size={18} /> Social Interaction</button></li>
           </ul>
         </nav>
         <div style={logoutDockStyle}>
@@ -1051,8 +1050,6 @@ function FamilyDashboard({ token, onLogout }) {
       </aside>
 
       <main style={{ flex: 1, overflowY: 'auto' }}>
-        {activePage === 'social' && <SocialInteraction token={token} onLogout={onLogout} />}
-
         {activePage === 'overview' && (
           <div style={{ padding: '3rem' }}>
             {errorMsg ? (
