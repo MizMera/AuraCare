@@ -18,17 +18,17 @@ const Card = ({ children, style }) => (
 );
 
 const GI_COLORS = {
-  'Élevé':  { bg: '#FEE2E2', color: '#B91C1C' },
-  'Moyen':  { bg: '#FEF3C7', color: '#B45309' },
-  'Faible': { bg: '#D1FAE5', color: '#065F46' },
-  'Nul':    { bg: '#F1F5F9', color: '#475569' },
+  'High':  { bg: '#FEE2E2', color: '#B91C1C' },
+  'Medium':  { bg: '#FEF3C7', color: '#B45309' },
+  'Low': { bg: '#D1FAE5', color: '#065F46' },
+  'None':    { bg: '#F1F5F9', color: '#475569' },
 };
 
 const CLASS_META = {
-  0: { label: 'Hypoglycémie',      color: '#3B82F6', bg: '#EFF6FF', icon: '↓',  border: '#BFDBFE' },
-  1: { label: 'Normale',           color: '#10B981', bg: '#ECFDF5', icon: '✓',  border: '#6EE7B7' },
-  2: { label: 'Pré-Hyperglycémie', color: '#F59E0B', bg: '#FFFBEB', icon: '!',  border: '#FDE68A' },
-  3: { label: 'Hyperglycémie',     color: '#EF4444', bg: '#FFF5F5', icon: '↑',  border: '#FECACA' },
+  0: { label: 'Hypoglycemia',      color: '#3B82F6', bg: '#EFF6FF', icon: '↓',  border: '#BFDBFE' },
+  1: { label: 'Normal',           color: '#10B981', bg: '#ECFDF5', icon: '✓',  border: '#6EE7B7' },
+  2: { label: 'Pre-Hyperglycemia', color: '#F59E0B', bg: '#FFFBEB', icon: '!',  border: '#FDE68A' },
+  3: { label: 'Hyperglycemia',     color: '#EF4444', bg: '#FFF5F5', icon: '↑',  border: '#FECACA' },
 };
 
 function GlucoseMeter({ value }) {
@@ -82,7 +82,7 @@ export default function DiabetesMonitor({ token, onLogout }) {
   const [modelStatus, setModelStatus]     = useState(null);
   const [savingReading, setSavingReading] = useState(false);
 
-  // Chargement des résidents diabétiques
+  // Load diabetic residents
   const fetchResidents = useCallback(async () => {
     try {
       const res = await axios.get(`${API_BASE}/residents/`, { headers: authHeader });
@@ -90,7 +90,7 @@ export default function DiabetesMonitor({ token, onLogout }) {
     } catch (e) { if (e.response?.status === 401) onLogout(); }
   }, [token]); // eslint-disable-line
 
-  // Statut du modèle
+  // Model status
   const fetchModelStatus = useCallback(async () => {
     try {
       const res = await axios.get(`${API_BASE}/diabetes/status/`, { headers: authHeader });
@@ -98,7 +98,7 @@ export default function DiabetesMonitor({ token, onLogout }) {
     } catch { /* silencieux */ }
   }, [token]); // eslint-disable-line
 
-  // Historique du résident
+  // Resident history
   const fetchHistory = useCallback(async (residentId) => {
     if (!residentId) return;
     try {
@@ -154,9 +154,9 @@ export default function DiabetesMonitor({ token, onLogout }) {
   const classIdx         = glucoseValue < 70 ? 0 : glucoseValue < 140 ? 1 : glucoseValue < 200 ? 2 : 3;
   const classMeta        = CLASS_META[classIdx];
 
-  // Données historique pour le graphique
+  // Historical data for chart
   const chartData = [...history].reverse().map((r, i) => ({
-    name:  new Date(r.measured_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+    name:  new Date(r.measured_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
     value: r.value,
     class: r.class,
   }));
@@ -164,17 +164,17 @@ export default function DiabetesMonitor({ token, onLogout }) {
   return (
     <div style={{ flex: 1, padding: '2.5rem', background: 'var(--alice-blue)', overflowY: 'auto', minHeight: '100vh' }}>
 
-      {/* En-tête */}
+      {/* Header */}
       <div style={{ marginBottom: '2rem' }}>
         <h1 style={{ color: 'var(--midnight-green)', margin: 0, fontSize: '1.8rem', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Activity size={26} /> Suivi Glycémie — Diabète
+          <Activity size={26} /> Glucose Monitoring — Diabetes
         </h1>
         <p style={{ color: 'var(--text-light)', margin: '4px 0 0', fontSize: 14 }}>
-          Mesurez la glycémie et obtenez des recommandations alimentaires personnalisées par IA.
+          Measure blood glucose and get AI-powered personalized dietary recommendations.
         </p>
       </div>
 
-      {/* Statut modèle */}
+      {/* Model status */}
       {modelStatus?.model_ready && (
         <div style={{
           marginBottom: '1.5rem', padding: '12px 16px', borderRadius: 12,
@@ -182,19 +182,19 @@ export default function DiabetesMonitor({ token, onLogout }) {
           border: '1px solid #6EE7B7',
           display: 'flex', alignItems: 'center', gap: 10, fontSize: 13,
         }}>
-          <CheckCircle size={16} color="#10B981" /> <strong style={{ color: '#065F46' }}>Modèle LSTM actif</strong> — Prédictions par deep learning
+          <CheckCircle size={16} color="#10B981" /> <strong style={{ color: '#065F46' }}>LSTM Model active</strong> — Deep learning predictions
         </div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '1.5rem', alignItems: 'start' }}>
 
-        {/* ── Colonne gauche : saisie ── */}
+        {/* ── Left column: input ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
 
-          {/* Sélection résident */}
+          {/* Resident selection */}
           <Card>
             <div style={{ fontWeight: 800, color: 'var(--midnight-green)', marginBottom: 12, fontSize: 15 }}>
-              Sélectionner le résident
+              Select resident
             </div>
             <div style={{ display: 'grid', gap: 8, maxHeight: 220, overflowY: 'auto' }}>
               {residents.map(r => (
@@ -218,23 +218,23 @@ export default function DiabetesMonitor({ token, onLogout }) {
                   </div>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--midnight-green)' }}>{r.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-light)' }}>Chambre {r.room_number} · {r.age} ans</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-light)' }}>Room {r.room_number} · {r.age} yrs</div>
                   </div>
                 </button>
               ))}
             </div>
           </Card>
 
-          {/* Saisie mesures */}
+          {/* Measurements input */}
           <Card>
             <div style={{ fontWeight: 800, color: 'var(--midnight-green)', marginBottom: 14, fontSize: 15 }}>
-              Saisie des mesures
+              Enter measurements
             </div>
 
-            {/* Glycémie principale */}
+            {/* Main glucose */}
             <div style={{ marginBottom: 12 }}>
               <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-light)', display: 'block', marginBottom: 5 }}>
-                Glycémie (mg/dL) *
+                Blood glucose (mg/dL) *
               </label>
               <input
                 type="number" min="0" max="600" step="1"
@@ -250,7 +250,7 @@ export default function DiabetesMonitor({ token, onLogout }) {
                   transition: 'all .2s',
                 }}
               />
-              {/* Indicateur temps réel */}
+              {/* Real-time indicator */}
               {form.blood_glucose_level && (
                 <div style={{
                   marginTop: 6, padding: '5px 10px', borderRadius: 8,
@@ -263,11 +263,11 @@ export default function DiabetesMonitor({ token, onLogout }) {
               )}
             </div>
 
-            {/* HbA1c et BMI côte à côte */}
+            {/* HbA1c and BMI side by side */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
               {[
-                { key: 'HbA1c_level', label: 'HbA1c (%)', placeholder: 'ex : 7.2', step: '0.1' },
-                { key: 'bmi',         label: 'IMC (kg/m²)', placeholder: 'ex : 28.5', step: '0.1' },
+                { key: 'HbA1c_level', label: 'HbA1c (%)', placeholder: 'e.g. 7.2', step: '0.1' },
+                { key: 'bmi',         label: 'BMI (kg/m²)', placeholder: 'e.g. 28.5', step: '0.1' },
               ].map(f => (
                 <div key={f.key}>
                   <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-light)', display: 'block', marginBottom: 4 }}>
@@ -293,7 +293,7 @@ export default function DiabetesMonitor({ token, onLogout }) {
                 Notes (optionnel)
               </label>
               <textarea
-                rows={2} placeholder="avant repas, après exercice..."
+                rows={2} placeholder="before meal, after exercise..."
                 value={form.notes}
                 onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                 style={{
@@ -304,7 +304,7 @@ export default function DiabetesMonitor({ token, onLogout }) {
               />
             </div>
 
-            {/* Boutons */}
+            {/* Buttons */}
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 onClick={handlePredict}
@@ -317,7 +317,7 @@ export default function DiabetesMonitor({ token, onLogout }) {
                   transition: 'all .2s',
                 }}
               >
-                {loading ? 'Analyse…' : 'Analyser & Recommander'}
+                {loading ? 'Analyzing…' : 'Analyze & Recommend'}
               </button>
               <button
                 onClick={handleSaveReading}
@@ -328,16 +328,16 @@ export default function DiabetesMonitor({ token, onLogout }) {
                   cursor: 'pointer', background: 'white', color: 'var(--midnight-green)',
                 }}
               >
-                {savingReading ? '…' : 'Sauvegarder'}
+                {savingReading ? '…' : 'Save'}
               </button>
             </div>
           </Card>
 
-          {/* Graphique historique */}
+          {/* History chart */}
           {history.length > 0 && (
             <Card>
               <div style={{ fontWeight: 800, color: 'var(--midnight-green)', marginBottom: 12, fontSize: 14, display: 'flex', alignItems: 'center', gap: 7 }}>
-                <TrendingUp size={15} /> Historique glycémique
+                <TrendingUp size={15} /> Glucose History
               </div>
               <ResponsiveContainer width="100%" height={160}>
                 <LineChart data={chartData}>
@@ -345,7 +345,7 @@ export default function DiabetesMonitor({ token, onLogout }) {
                   <XAxis dataKey="name" tick={{ fontSize: 9 }} />
                   <YAxis domain={[40, 300]} tick={{ fontSize: 9 }} />
                   <Tooltip
-                    formatter={(v) => [`${v} mg/dL`, 'Glycémie']}
+                    formatter={(v) => [`${v} mg/dL`, 'Blood Glucose']}
                     contentStyle={{ borderRadius: 8, fontSize: 12 }}
                   />
                   <ReferenceLine y={70}  stroke="#3B82F6" strokeDasharray="4 4" label={{ value:'Hypo', fontSize:9, fill:'#3B82F6' }} />
@@ -361,12 +361,12 @@ export default function DiabetesMonitor({ token, onLogout }) {
           )}
         </div>
 
-        {/* ── Colonne droite : résultats ── */}
+        {/* ── Right column: results ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
 
           {result ? (
             <>
-              {/* Résultat glycémie */}
+              {/* Glucose result */}
               <Card style={{ border: '2px solid', borderColor: CLASS_META[result.glucose_class]?.border }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
                   <div>
@@ -380,19 +380,19 @@ export default function DiabetesMonitor({ token, onLogout }) {
                   <div style={{ textAlign: 'right' }}>
                     {result.confidence && (
                       <div style={{ fontSize: 11, color: 'var(--text-light)' }}>
-                        Confiance IA : <strong>{result.confidence}%</strong>
+                        AI Confidence : <strong>{result.confidence}%</strong>
                       </div>
                     )}
                     <div style={{ fontSize: 11, color: 'var(--text-light)' }}>
-                      Modèle : {result.model_used}
+                      Model: {result.model_used}
                     </div>
                   </div>
                 </div>
 
-                {/* Jauge glycémie */}
+                {/* Glucose gauge */}
                 <GlucoseMeter value={result.blood_glucose} />
 
-                {/* Badge classe */}
+                {/* Class badge */}
                 <div style={{
                   marginTop: 14, padding: '10px 14px', borderRadius: 10,
                   background: CLASS_META[result.glucose_class]?.bg,
@@ -418,24 +418,24 @@ export default function DiabetesMonitor({ token, onLogout }) {
                 </div>
               </Card>
 
-              {/* Recommandations alimentaires */}
+              {/* Dietary recommendations */}
               {result.recommendation && (
                 <Card>
                   <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--midnight-green)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Utensils size={16} /> Recommandations alimentaires
+                    <Utensils size={16} /> Dietary Recommendations
                   </div>
                   <p style={{ fontSize: 13, color: 'var(--text-light)', margin: '0 0 14px' }}>
                     {result.recommendation.title}
                   </p>
 
-                  {/* Aliments recommandés */}
+                  {/* Recommended foods */}
                   <div style={{ marginBottom: 14 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--midnight-green)', marginBottom: 8 }}>
-                      Aliments conseillés
+                      Recommended foods
                     </div>
                     <div style={{ display: 'grid', gap: 7 }}>
                       {result.recommendation.foods?.map((food, i) => {
-                        const gi = GI_COLORS[food.gi] || GI_COLORS['Nul'];
+                        const gi = GI_COLORS[food.gi] || GI_COLORS['None'];
                         return (
                           <div key={i} style={{
                             display: 'flex', alignItems: 'center', gap: 10,
@@ -448,14 +448,14 @@ export default function DiabetesMonitor({ token, onLogout }) {
                                 {food.name}
                               </div>
                               <div style={{ fontSize: 11, color: 'var(--text-light)' }}>
-                                Glucides : {food.carbs}
+                                Carbs: {food.carbs}
                               </div>
                             </div>
                             <span style={{
                               padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 800,
                               background: gi.bg, color: gi.color, flexShrink: 0,
                             }}>
-                              IG {food.gi}
+                              GI {food.gi}
                             </span>
                           </div>
                         );
@@ -463,7 +463,7 @@ export default function DiabetesMonitor({ token, onLogout }) {
                     </div>
                   </div>
 
-                  {/* Conseil */}
+                  {/* Advice */}
                   <div style={{
                     padding: '10px 13px', borderRadius: 10,
                     background: '#F0FDFA', border: '1px solid #99F6E4',
@@ -472,11 +472,11 @@ export default function DiabetesMonitor({ token, onLogout }) {
                     {result.recommendation.advice}
                   </div>
 
-                  {/* Aliments à éviter */}
+                  {/* Foods to avoid */}
                   {result.recommendation.avoid?.length > 0 && (
                     <div>
                       <div style={{ fontSize: 12, fontWeight: 700, color: '#B91C1C', marginBottom: 7 }}>
-                        À éviter
+                        To avoid
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                         {result.recommendation.avoid.map((item, i) => (
@@ -495,14 +495,14 @@ export default function DiabetesMonitor({ token, onLogout }) {
               )}
             </>
           ) : (
-            /* État initial */
+            /* Initial state */
             <Card style={{ textAlign: 'center', padding: '3rem 2rem' }}>
               <div style={{ fontSize: 64, marginBottom: 12, color: 'var(--moonstone)' }}><Activity size={56} /></div>
               <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--midnight-green)', marginBottom: 8 }}>
-                Suivi glycémique intelligent
+                Smart glucose monitoring
               </div>
               <p style={{ color: 'var(--text-light)', fontSize: 13, maxWidth: 300, margin: '0 auto 16px' }}>
-                Sélectionnez un résident, saisissez sa glycémie et obtenez une analyse IA avec recommandations alimentaires personnalisées.
+                Select a resident, enter their blood glucose level and get an AI analysis with personalized dietary recommendations.
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, maxWidth: 280, margin: '0 auto' }}>
                 {Object.entries(CLASS_META).map(([k, v]) => (
@@ -519,11 +519,11 @@ export default function DiabetesMonitor({ token, onLogout }) {
             </Card>
           )}
 
-          {/* Historique récent */}
+          {/* Recent history */}
           {history.length > 0 && (
             <Card style={{ padding: '1.25rem' }}>
               <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--midnight-green)', marginBottom: 10 }}>
-              Dernières mesures
+              Recent readings
               </div>
               <div style={{ display: 'grid', gap: 6 }}>
                 {history.slice(0, 5).map(r => {
@@ -539,7 +539,7 @@ export default function DiabetesMonitor({ token, onLogout }) {
                       </span>
                       <span style={{ fontSize: 11, fontWeight: 700, color: m.color }}>{m.label}</span>
                       <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-light)' }}>
-                        {new Date(r.measured_at).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}
+                        {new Date(r.measured_at).toLocaleString('en-GB', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}
                       </span>
                     </div>
                   );

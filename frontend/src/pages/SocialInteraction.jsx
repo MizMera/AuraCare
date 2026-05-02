@@ -219,7 +219,7 @@ export default function SocialInteraction({
           .filter((r) => r?.id)
           .map((r) => ({
             id:        Number(r.id),
-            name:      r.name   || `Résident #${r.id}`,
+            name:      r.name   || `Resident #${r.id}`,
             photo_url: r.photo_url || null,
           }))
           .sort((a, b) => a.id - b.id);
@@ -270,15 +270,15 @@ export default function SocialInteraction({
 
   // ── Face Recognition helpers ──────────────────────────────
   /**
-   * Capture une frame depuis le <video> et l'envoie à /api/face/identify/.
-   * Les résultats sont stockés dans faceResults et dessinés sur faceCanvasRef.
+   * Captures a frame from <video> and sends it to /api/face/identify/.
+   * Results are stored in faceResults and drawn on faceCanvasRef.
    */
   const runFaceRecognition = useCallback(async () => {
     const video  = videoRef.current;
     const canvas = faceCanvasRef.current;
     if (!video || !canvas || video.readyState < 2) return;
 
-    // Capture de la frame courante
+    // Capture current frame
     const ctx = canvas.getContext('2d');
     canvas.width  = video.videoWidth  || 640;
     canvas.height = video.videoHeight || 480;
@@ -295,7 +295,7 @@ export default function SocialInteraction({
       setFaceResults(faces);
       setFaceError('');
 
-      // Dessin des boîtes sur le canvas
+      // Draw bounding boxes on canvas
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       faces.forEach(face => {
         const { top, right, bottom, left } = face.location;
@@ -317,10 +317,10 @@ export default function SocialInteraction({
     } catch (e) {
       if (e.response?.status === 503) {
         setFaceSupported(false);
-        setFaceError('face_recognition non installé sur le serveur.');
+        setFaceError('face_recognition not installed on the server.');
         stopFaceRecognition();
       }
-      // Timeout / réseau : on réessaiera au prochain tick
+      // Timeout / network: will retry on next tick
     }
   }, [token]); // eslint-disable-line
 
@@ -336,12 +336,12 @@ export default function SocialInteraction({
   const stopFaceRecognition = () => {
     clearInterval(faceIntervalRef.current);
     setFaceEnabled(false);
-    // Effacement du canvas
+    // Clear the canvas
     const canvas = faceCanvasRef.current;
     if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
   };
 
-  // Nettoyage à l'arrêt du composant
+  // Cleanup on component unmount
   useEffect(() => () => { clearInterval(faceIntervalRef.current); }, []);
 
   // ── Webcam ────────────────────────────────────────────────
@@ -385,14 +385,14 @@ export default function SocialInteraction({
         setRtFeed(prev => [ev, ...prev].slice(0, 20));
       }, 2000);
     } catch (err) {
-      alert('Impossible d\'accéder à la caméra : ' + err.message);
+      alert('Unable to access camera: ' + err.message);
     }
   };
 
   const stopWebcam = async () => {
     clearInterval(rtIntervalRef.current);
     clearInterval(durIntervalRef.current);
-    stopFaceRecognition();   // ← arrêt de la reconnaissance faciale
+    stopFaceRecognition();   // ← stop face recognition
     setRtSaving(true);
     setRtActive(false);
 
@@ -647,7 +647,7 @@ export default function SocialInteraction({
               color="#EF4444" icon={<AlertTriangle size={20}/>}
               sub={`${kpi.alerts_today > 0 ? 'Needs attention' : 'No alerts'}`} />
             <KpiCard label="Videos analysed" value={kpi.total_analysed ?? 0}
-              color="var(--moonstone)" icon={<CheckCircle size={20}/>} sub="Total cumulé" />
+              color="var(--moonstone)" icon={<CheckCircle size={20}/>} sub="Cumulative total" />
             <KpiCard label="Avg isolation score" value={avgScore + '%'}
               color={scoreColor(avgScore)} icon={<Users size={20}/>}
               sub="Toutes sessions" />
@@ -868,7 +868,7 @@ export default function SocialInteraction({
                 {faceSupported && (
                   <button
                     onClick={faceEnabled ? stopFaceRecognition : startFaceRecognition}
-                    title={faceEnabled ? 'Désactiver la reconnaissance faciale' : 'Activer la reconnaissance faciale'}
+                    title={faceEnabled ? 'Disable face recognition' : 'Enable face recognition'}
                     style={{
                       display:'flex', alignItems:'center', justifyContent:'center', gap:7,
                       padding:'13px 16px', borderRadius:'var(--border-radius-sm)',
@@ -907,7 +907,7 @@ export default function SocialInteraction({
                   </strong>
                   &nbsp;· Duration: {rtDur}s
                   &nbsp;· <span style={{ cursor:'pointer', color:'var(--moonstone)', fontWeight:600 }}
-                    onClick={() => setTab('dashboard')}>Voir dans le dashboard →</span>
+                    onClick={() => setTab('dashboard')}>View in dashboard →</span>
                 </div>
               </div>
             )}
@@ -978,7 +978,7 @@ export default function SocialInteraction({
                 <div style={{ fontWeight:700, fontSize:13, color:'var(--midnight-green)',
                   marginBottom:10, display:'flex', alignItems:'center', gap:7 }}>
                   <Eye size={14} color="#10B981" />
-                  Reconnaissance faciale en direct
+                  Live face recognition
                   <span style={{ marginLeft:'auto', background:'#D1FAE5', color:'#065F46',
                     borderRadius:99, padding:'2px 9px', fontSize:10, fontWeight:800 }}>
                     LIVE
@@ -987,7 +987,7 @@ export default function SocialInteraction({
 
                 {faceResults.length === 0 ? (
                   <p style={{ color:'var(--text-light)', fontSize:12, textAlign:'center', padding:'12px 0' }}>
-                    En attente de détection de visages…
+                    Waiting for face detection…
                   </p>
                 ) : faceResults.map((face, i) => (
                   <div key={i} style={{ display:'flex', alignItems:'center', gap:10,
@@ -1024,14 +1024,14 @@ export default function SocialInteraction({
                       background: face.resident_id ? '#D1FAE5' : '#FEF3C7',
                       color: face.resident_id ? '#065F46' : '#B45309',
                     }}>
-                      {face.resident_id ? '✓ Identifié' : '? Inconnu'}
+                      {face.resident_id ? '✓ Identified' : '? Unknown'}
                     </span>
                   </div>
                 ))}
 
                 <p style={{ margin:'10px 0 0', fontSize:11, color:'var(--text-light)' }}>
-                  {faceResults.length} visage(s) dans la frame ·{' '}
-                  {faceResults.filter(f => f.resident_id).length} identifié(s)
+                  {faceResults.length} face(s) in frame ·{' '}
+                  {faceResults.filter(f => f.resident_id).length} identified
                 </p>
               </Card>
             )}
@@ -1158,7 +1158,7 @@ export default function SocialInteraction({
                   style={{ width:'100%', padding:11, borderRadius:'var(--border-radius-sm)',
                     border:'none', background:'var(--midnight-green)', color:'#fff',
                     fontWeight:700, cursor:'pointer', fontSize:13 }}>
-                  Voir dans le dashboard →
+                  View in dashboard →
                 </button>
               </div>
             )}
