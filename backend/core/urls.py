@@ -1,4 +1,9 @@
 from django.urls import path
+from .diabetes_views import (
+    GlucosePredictView,
+    GlucoseHistoryView,
+    DiabetesModelStatusView,
+)
 from .face_recognition_views import (
     ResidentPhotoUploadView,
     ResidentListView,
@@ -121,4 +126,9 @@ urlpatterns = [
     path('adherence/risk/<int:resident_id>/',        AdherenceRiskHistoryView.as_view(),     name='adherence-risk-history'),
     path('adherence/run/',                           RunAdherencePredictionView.as_view(),   name='adherence-run'),
 
+
+    # Diabetes & Glycémie
+    path('diabetes/predict/',                    GlucosePredictView.as_view(),       name='diabetes-predict'),
+    path('diabetes/history/<int:resident_id>/',  GlucoseHistoryView.as_view(),       name='diabetes-history'),
+    path('diabetes/status/',                     DiabetesModelStatusView.as_view(),  name='diabetes-status'),
 ]

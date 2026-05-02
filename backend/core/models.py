@@ -549,3 +549,39 @@ class AdherenceRiskScore(models.Model):
     @property
     def risk_color(self):
         return {'low': 'green', 'medium': 'orange', 'high': 'red'}.get(self.risk_level, 'grey')
+
+# ── Glycémie & Diabète ────────────────────────────────────────
+
+class GlucoseReading(models.Model):
+    """Mesure de glycémie d'un résident diabétique."""
+
+    CLASS_HYPO  = 0
+    CLASS_NORMAL= 1
+    CLASS_PRE   = 2
+    CLASS_HYPER = 3
+    CLASS_CHOICES = [
+        (CLASS_HYPO,  'Hypoglycémie'),
+        (CLASS_NORMAL,'Normale'),
+        (CLASS_PRE,   'Pré-Hyperglycémie'),
+        (CLASS_HYPER, 'Hyperglycémie'),
+    ]
+
+    resident = models.ForeignKey(
+        Resident, on_delete=models.CASCADE, related_name='glucose_readings'
+    )
+    blood_glucose = models.FloatField(help_text='Glycémie en mg/dL')
+    glucose_class = models.IntegerField(choices=CLASS_CHOICES, default=CLASS_NORMAL)
+    HbA1c_level   = models.FloatField(null=True, blank=True, help_text='HbA1c en %')
+    bmi           = models.FloatField(null=True, blank=True, help_text='IMC kg/m²')
+    notes         = models.TextField(blank=True, default='')
+    measured_at   = models.DateTimeField(default=timezone.now)
+    created_by    = models.CharField(max_length=100, blank=True, default='')
+
+    class Meta:
+        verbose_name         = 'Glucose Reading'
+        verbose_name_plural  = 'Glucose Readings'
+        ordering             = ['-measured_at']
+
+    def __str__(self):
+        return f"{self.resident.name} — {self.blood_glucose} mg/dL ({self.get_glucose_class_display()})"
+

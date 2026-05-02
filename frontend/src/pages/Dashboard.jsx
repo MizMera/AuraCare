@@ -9,6 +9,7 @@ import {
 import SocialInteraction from './SocialInteraction';
 import WanderingDetection from './WanderingDetection';
 import ResidentsPage from './ResidentsPage';
+import DiabetesMonitor from './DiabetesMonitor';
 import NotificationBell from '../components/NotificationBell';
 import GaitAnalysisPanel from '../components/GaitAnalysisPanel';
 import ChatbotWidget from '../components/ChatbotWidget';
@@ -733,7 +734,9 @@ function StaffDashboard({ token, onLogout, role }) {
         <nav style={{ flex: 1, padding: '1rem' }}>
           <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', listStyle: 'none', padding: 0 }}>
             <li><button type="button" onClick={() => setStaffSection('residents')} style={navBtn(staffSection === 'residents')} {...sidebarBtnHoverHandlers}><Users size={18} /> Assigned Residents</button></li>
-<li><button type="button" onClick={() => setStaffSection('residents-db')} style={navBtn(staffSection === 'residents-db')} {...sidebarBtnHoverHandlers}><Users size={18} /> Residents informations</button></li>            <li><button type="button" onClick={() => setStaffSection('incidents')} style={navBtn(staffSection === 'incidents')} {...sidebarBtnHoverHandlers}><ShieldAlert size={18} /> Facility Incidents</button></li>
+            <li><button type="button" onClick={() => setStaffSection('residents-db')} style={navBtn(staffSection === 'residents-db')} {...sidebarBtnHoverHandlers}><Users size={18} /> Residents Information</button></li>
+            <li><button type="button" onClick={() => setStaffSection('diabetes')} style={navBtn(staffSection === 'diabetes')} {...sidebarBtnHoverHandlers}><Activity size={18} /> Glucose Monitoring</button></li>
+            <li><button type="button" onClick={() => setStaffSection('incidents')} style={navBtn(staffSection === 'incidents')} {...sidebarBtnHoverHandlers}><ShieldAlert size={18} /> Facility Incidents</button></li>
             <li><button type="button" onClick={() => setStaffSection('meals')} style={navBtn(staffSection === 'meals')} {...sidebarBtnHoverHandlers}><UtensilsCrossed size={18} /> Meals & Alerts</button></li>
             <li><button type="button" onClick={() => setStaffSection('gait')} style={navBtn(staffSection === 'gait')} {...sidebarBtnHoverHandlers}><Activity size={18} /> Gait Analysis</button></li>
             <li><button type="button" onClick={() => setStaffSection('livefeed')} style={navBtn(staffSection === 'livefeed')} {...sidebarBtnHoverHandlers}><Video size={18} /> Live Feed</button></li>
@@ -869,6 +872,8 @@ function StaffDashboard({ token, onLogout, role }) {
               <WanderingDetection token={token} onLogout={onLogout} />
             ) : staffSection === 'residents-db' ? (
               <ResidentsPage token={token} onLogout={onLogout} />
+            ) : staffSection === 'diabetes' ? (
+              <DiabetesMonitor token={token} onLogout={onLogout} />
             ) : staffSection === 'incidents' ? (
               <div style={sectionCardStyle}>
                 <h3 style={{ color: 'var(--midnight-green)', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
