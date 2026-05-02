@@ -184,28 +184,117 @@ class MobileActivityLogView(views.APIView):
 
     def get(self, request, *args, **kwargs):
         user = request.user
+        if user.role != CustomUser.RoleChoices.FAMILY:
+            return Response(
+                {"error": "Only family users can access the family portal."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         residents = _residents_for_user(user)
         if not residents.exists():
-            if user.role in [CustomUser.RoleChoices.FAMILY, CustomUser.RoleChoices.CAREGIVER]:
-                return Response({"error": "No residents assigned."}, status=status.HTTP_404_NOT_FOUND)
-            return Response({"error": "Forbidden: Invalid role"}, status=status.HTTP_403_FORBIDDEN)
-        
-        # Generate summary for the first associated resident
+            return Response({"error": "No residents assigned."}, status=status.HTTP_404_NOT_FOUND)
+
         resident = residents.first()
+        now = timezone.now()
+        today = timezone.localdate()
+        start_of_today = timezone.make_aware(datetime.combine(today, datetime.min.time()))
         seven_days_ago = timezone.now() - timedelta(days=7)
+        twenty_four_hours_ago = now - timedelta(hours=24)
 
         incidents = Incident.objects.filter(resident=resident, timestamp__gte=seven_days_ago)
         incident_counts = incidents.values('type').annotate(count=Count('id'))
 
         metrics = HealthMetric.objects.filter(resident=resident, timestamp__gte=seven_days_ago)
         avg_social = metrics.filter(metric_type='SOCIAL_SCORE').aggregate(Avg('value'))
+        avg_gait = metrics.filter(metric_type='GAIT_SPEED').aggregate(Avg('value'))
+        today_metrics = HealthMetric.objects.filter(resident=resident, timestamp__gte=start_of_today).order_by('-timestamp')
+        today_incidents = incidents.filter(timestamp__gte=start_of_today).order_by('-timestamp')
+
+        latest_social_metric = metrics.filter(metric_type='SOCIAL_SCORE').order_by('-timestamp').first()
+        latest_gait_metric = metrics.filter(metric_type='GAIT_SPEED').order_by('-timestamp').first()
+        latest_metric = metrics.order_by('-timestamp').first()
+        latest_incident = incidents.order_by('-timestamp').first()
+
+        activity_items = []
+
+        for incident in today_incidents[:6]:
+            activity_items.append({
+                "kind": "incident",
+                "title": incident.get_type_display(),
+                "summary": incident.description or f"{incident.get_type_display()} reported in {incident.zone.name}.",
+                "severity": incident.get_severity_display(),
+                "timestamp": timezone.localtime(incident.timestamp).isoformat(),
+                "zone": incident.zone.name if incident.zone else None,
+            })
+
+        for metric in today_metrics[:6]:
+            activity_items.append({
+                "kind": "metric",
+                "title": metric.get_metric_type_display(),
+                "summary": f"{metric.get_metric_type_display()} recorded at {metric.value}.",
+                "severity": "Info",
+                "timestamp": timezone.localtime(metric.timestamp).isoformat(),
+                "zone": metric.zone.name if metric.zone else None,
+            })
+
+        activity_items.sort(key=lambda item: item["timestamp"], reverse=True)
+        activity_items = activity_items[:8]
 
         return Response({
             "resident_id": resident.id,
             "resident_name": resident.name,
+            "resident": {
+                "id": resident.id,
+                "name": resident.name,
+                "age": resident.age,
+                "room_number": resident.room_number,
+                "risk_level": resident.risk_level,
+                "assigned_caregiver": (
+                    resident.assigned_caregiver.get_full_name() or resident.assigned_caregiver.username
+                    if resident.assigned_caregiver else None
+                ),
+            },
+            "daily_summary": {
+                "date": today.isoformat(),
+                "incidents_today": today_incidents.count(),
+                "metrics_recorded_today": today_metrics.count(),
+                "incidents_last_24h": Incident.objects.filter(
+                    resident=resident,
+                    timestamp__gte=twenty_four_hours_ago,
+                ).count(),
+                "latest_incident": (
+                    {
+                        "type": latest_incident.type,
+                        "type_display": latest_incident.get_type_display(),
+                        "severity": latest_incident.severity,
+                        "severity_display": latest_incident.get_severity_display(),
+                        "timestamp": timezone.localtime(latest_incident.timestamp).isoformat(),
+                    }
+                    if latest_incident else None
+                ),
+                "latest_metric": (
+                    {
+                        "metric_type": latest_metric.metric_type,
+                        "metric_type_display": latest_metric.get_metric_type_display(),
+                        "value": latest_metric.value,
+                        "timestamp": timezone.localtime(latest_metric.timestamp).isoformat(),
+                    }
+                    if latest_metric else None
+                ),
+            },
+            "activity_report": activity_items,
+            "latest_metrics": {
+                "social_score": latest_social_metric.value if latest_social_metric else None,
+                "gait_speed": latest_gait_metric.value if latest_gait_metric else None,
+                "last_updated": (
+                    timezone.localtime(latest_metric.timestamp).isoformat()
+                    if latest_metric else None
+                ),
+            },
             "incident_summary": list(incident_counts),
             "average_social_score_7d": avg_social.get('value__avg'),
-            "recent_incidents": IncidentSerializer(incidents.order_by('-timestamp')[:10], many=True).data
+            "average_gait_speed_7d": avg_gait.get('value__avg'),
+            "recent_incidents": IncidentSerializer(incidents.order_by('-timestamp')[:10], many=True).data,
         }, status=status.HTTP_200_OK)
 
 

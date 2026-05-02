@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Navigate, useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
-import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import {
   LogOut, Activity, AlertCircle, ShieldAlert, Users, HeartPulse, Video,
   Eye, Brain, UtensilsCrossed, Clock3, Plus, Pencil, Trash2, CheckCircle2, Sparkles,
@@ -975,16 +974,13 @@ function FamilyDashboard({ token, onLogout }) {
   }, [token, onLogout]);
 
   if (loading) return <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--midnight-green)' }}><h2>Loading AI Telemetry...</h2></div>;
-
-  const tempChartData = data ? [
-    { name: 'Mon', gait: 0.8, social: data.average_social_score_7d - 5 || 50 },
-    { name: 'Tue', gait: 0.9, social: data.average_social_score_7d + 2 || 55 },
-    { name: 'Wed', gait: 1.0, social: data.average_social_score_7d - 1 || 52 },
-    { name: 'Thu', gait: 0.9, social: data.average_social_score_7d + 5 || 60 },
-    { name: 'Fri', gait: 0.7, social: data.average_social_score_7d - 3 || 45 },
-    { name: 'Sat', gait: 0.85, social: data.average_social_score_7d || 53 },
-    { name: 'Sun', gait: 0.92, social: data.average_social_score_7d + 1 || 55 },
-  ] : [];
+  const resident = data?.resident;
+  const dailySummary = data?.daily_summary;
+  const activityReport = data?.activity_report || [];
+  const recentIncidents = data?.recent_incidents || [];
+  const latestMetrics = data?.latest_metrics || {};
+  const portalStatus = errorMsg ? 'Unavailable' : 'Family Access Active';
+  const riskTone = resident?.risk_level === 'HIGH' ? '#DC2626' : resident?.risk_level === 'MEDIUM' ? '#D97706' : 'var(--moonstone)';
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--alice-blue)' }}>
@@ -997,9 +993,9 @@ function FamilyDashboard({ token, onLogout }) {
         </div>
         <nav style={{ flex: 1, padding: '1rem' }}>
           <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', listStyle: 'none', padding: 0 }}>
-            <li><button onClick={() => setActivePage('overview')} style={navBtn(activePage === 'overview')} {...sidebarBtnHoverHandlers}><Activity size={18} /> Overview</button></li>
+            <li><button type="button" onClick={() => setActivePage('overview')} style={navBtn(activePage === 'overview')} {...sidebarBtnHoverHandlers}><Users size={18} /> Assigned Resident</button></li>
+            <li><button type="button" onClick={() => setActivePage('activity')} style={navBtn(activePage === 'activity')} {...sidebarBtnHoverHandlers}><Activity size={18} /> Daily Activity</button></li>
             <li><button onClick={() => setActivePage('incidents')} style={navBtn(activePage === 'incidents')} {...sidebarBtnHoverHandlers}><ShieldAlert size={18} /> Incident Logs</button></li>
-            <li><button onClick={() => setActivePage('social')} style={navBtn(activePage === 'social')} {...sidebarBtnHoverHandlers}><Brain size={18} /> Social Interaction</button></li>
           </ul>
         </nav>
         <div style={logoutDockStyle}>
@@ -1021,8 +1017,6 @@ function FamilyDashboard({ token, onLogout }) {
       </aside>
 
       <main style={{ flex: 1, overflowY: 'auto' }}>
-        {activePage === 'social' && <SocialInteraction token={token} onLogout={onLogout} />}
-
         {activePage === 'overview' && (
           <div style={{ padding: '3rem' }}>
             {errorMsg ? (
@@ -1034,76 +1028,160 @@ function FamilyDashboard({ token, onLogout }) {
               </div>
             ) : (
               <>
-                <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem' }}>
+                <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem', gap: '1rem', flexWrap: 'wrap' }}>
                   <div>
-                    <h1 style={{ color: 'var(--midnight-green)', margin: 0 }}>Resident Overview</h1>
-                    <p style={{ color: 'var(--text-light)', margin: 0 }}>Monitoring: {data?.resident_name}</p>
+                    <h1 style={{ color: 'var(--midnight-green)', margin: 0 }}>Family Portal</h1>
+                    <p style={{ color: 'var(--text-light)', margin: 0 }}>Assigned resident: {resident?.name || data?.resident_name}</p>
                   </div>
                   <div style={{ padding: '10px 20px', backgroundColor: 'white', borderRadius: 'var(--border-radius-sm)', boxShadow: 'var(--box-shadow)' }}>
-                    <span style={{ color: 'var(--text-light)', fontSize: '0.9rem' }}>Status: </span>
-                    <span style={{ color: 'var(--moonstone)', fontWeight: 'bold' }}>Active & Secure</span>
+                    <span style={{ color: 'var(--text-light)', fontSize: '0.9rem' }}>Portal: </span>
+                    <span style={{ color: 'var(--moonstone)', fontWeight: 'bold' }}>{portalStatus}</span>
                   </div>
                 </header>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '2rem', marginBottom: '3rem' }}>
-                  <div style={sectionCardStyle}>
-                    <h4 style={{ color: 'var(--text-light)', margin: 0 }}>Social Interaction Score</h4>
-                    <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: 'var(--midnight-green)' }}>
-                      {data?.average_social_score_7d ? data.average_social_score_7d.toFixed(1) : 'N/A'}
-                    </div>
-                    <p style={{ color: 'var(--moonstone)', fontSize: '0.9rem', margin: 0 }}>Last 7 Days Avg</p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                  <div style={{ ...sectionCardStyle, borderTop: `4px solid ${riskTone}` }}>
+                    <p style={{ margin: 0, color: 'var(--text-light)', fontWeight: 600 }}>Risk Level</p>
+                    <h2 style={{ margin: '0.45rem 0 0', color: 'var(--midnight-green)', fontSize: '2rem' }}>{resident?.risk_level || 'N/A'}</h2>
+                    <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)', fontSize: '0.9rem' }}>Current care profile</p>
                   </div>
-                  <div style={sectionCardStyle}>
-                    <h4 style={{ color: 'var(--text-light)', margin: 0 }}>Recent Incidents</h4>
-                    <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#EF4444' }}>{data?.recent_incidents?.length || 0}</div>
-                    <p style={{ color: 'var(--text-light)', fontSize: '0.9rem', margin: 0 }}>Pending review</p>
+                  <div style={{ ...sectionCardStyle, borderTop: '4px solid var(--moonstone)' }}>
+                    <p style={{ margin: 0, color: 'var(--text-light)', fontWeight: 600 }}>Social Score</p>
+                    <h2 style={{ margin: '0.45rem 0 0', color: 'var(--midnight-green)', fontSize: '2rem' }}>
+                      {typeof data?.average_social_score_7d === 'number' ? data.average_social_score_7d.toFixed(1) : 'N/A'}
+                    </h2>
+                    <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)', fontSize: '0.9rem' }}>7-day average</p>
                   </div>
-                  <div style={sectionCardStyle}>
-                    <h4 style={{ color: 'var(--text-light)', margin: 0 }}>Active Monitors</h4>
-                    <div style={{ fontSize: '2.5rem', fontWeight: 'bold', color: 'var(--moonstone)' }}>7</div>
-                    <p style={{ color: 'var(--text-light)', fontSize: '0.9rem', margin: 0 }}>All Zones Nominal</p>
+                  <div style={{ ...sectionCardStyle, borderTop: '4px solid #EF4444' }}>
+                    <p style={{ margin: 0, color: 'var(--text-light)', fontWeight: 600 }}>Incidents Today</p>
+                    <h2 style={{ margin: '0.45rem 0 0', color: '#B91C1C', fontSize: '2rem' }}>{dailySummary?.incidents_today ?? 0}</h2>
+                    <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)', fontSize: '0.9rem' }}>Daily activity report</p>
+                  </div>
+                  <div style={{ ...sectionCardStyle, borderTop: '4px solid #0EA5E9' }}>
+                    <p style={{ margin: 0, color: 'var(--text-light)', fontWeight: 600 }}>Metrics Today</p>
+                    <h2 style={{ margin: '0.45rem 0 0', color: '#075985', fontSize: '2rem' }}>{dailySummary?.metrics_recorded_today ?? 0}</h2>
+                    <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)', fontSize: '0.9rem' }}>Health readings captured</p>
                   </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem' }}>
-                  <div style={{ ...sectionCardStyle, padding: '2rem' }}>
-                    <h3 style={{ color: 'var(--midnight-green)', marginBottom: '1.5rem' }}>Weekly Telemetry Trends</h3>
-                    <div style={{ height: 300 }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={tempChartData}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E9F1F6" />
-                          <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                          <YAxis yAxisId="left" axisLine={false} tickLine={false} />
-                          <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} />
-                          <Tooltip />
-                          <Legend />
-                          <Line yAxisId="left" type="monotone" dataKey="social" stroke="var(--moonstone)" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} name="Social Score" />
-                          <Line yAxisId="right" type="monotone" dataKey="gait" stroke="var(--midnight-green)" strokeWidth={3} dot={{ r: 4 }} name="Gait Speed (m/s)" />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                  <div style={{ ...sectionCardStyle, padding: '2rem' }}>
-                    <h3 style={{ color: 'var(--midnight-green)', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <AlertCircle color="#EF4444" /> Incident Feed
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) minmax(280px, 1fr)', gap: '1.5rem' }}>
+                  <section style={sectionCardStyle}>
+                    <h3 style={{ margin: '0 0 1rem 0', color: 'var(--midnight-green)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Users size={18} color="var(--moonstone)" /> Assigned Resident Information
                     </h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                      {data?.recent_incidents && data.recent_incidents.length > 0 ? (
-                        data.recent_incidents.map((incident, idx) => {
-                          const c = getIncidentColor(incident.type);
-                          return (
-                            <div key={idx} style={{ padding: '1rem', borderLeft: `4px solid ${c.border}`, backgroundColor: c.bg, borderRadius: '0 var(--border-radius-sm) var(--border-radius-sm) 0' }}>
-                              <p style={{ margin: '0 0 0.5rem 0', fontWeight: 'bold', color: c.text }}>{incident.type_display} detected</p>
-                              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-light)' }}>Zone: {incident.zone?.name || 'Unknown'}</p>
-                              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-light)' }}>{new Date(incident.timestamp).toLocaleString()}</p>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <p style={{ color: 'var(--text-light)', fontStyle: 'italic' }}>No recent incidents.</p>
-                      )}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+                      <div style={{ padding: '1rem', backgroundColor: '#F8FBFD', borderRadius: '16px', border: '1px solid #DCE9EF' }}>
+                        <p style={{ margin: 0, color: 'var(--text-light)', fontSize: '0.82rem', fontWeight: 700 }}>Resident Name</p>
+                        <p style={{ margin: '0.4rem 0 0', color: 'var(--midnight-green)', fontWeight: 700 }}>{resident?.name || 'Not assigned'}</p>
+                      </div>
+                      <div style={{ padding: '1rem', backgroundColor: '#F8FBFD', borderRadius: '16px', border: '1px solid #DCE9EF' }}>
+                        <p style={{ margin: 0, color: 'var(--text-light)', fontSize: '0.82rem', fontWeight: 700 }}>Room Number</p>
+                        <p style={{ margin: '0.4rem 0 0', color: 'var(--midnight-green)', fontWeight: 700 }}>{resident?.room_number || 'N/A'}</p>
+                      </div>
+                      <div style={{ padding: '1rem', backgroundColor: '#F8FBFD', borderRadius: '16px', border: '1px solid #DCE9EF' }}>
+                        <p style={{ margin: 0, color: 'var(--text-light)', fontSize: '0.82rem', fontWeight: 700 }}>Age</p>
+                        <p style={{ margin: '0.4rem 0 0', color: 'var(--midnight-green)', fontWeight: 700 }}>{resident?.age ?? 'N/A'}</p>
+                      </div>
+                      <div style={{ padding: '1rem', backgroundColor: '#F8FBFD', borderRadius: '16px', border: '1px solid #DCE9EF' }}>
+                        <p style={{ margin: 0, color: 'var(--text-light)', fontSize: '0.82rem', fontWeight: 700 }}>Assigned Caregiver</p>
+                        <p style={{ margin: '0.4rem 0 0', color: 'var(--midnight-green)', fontWeight: 700 }}>{resident?.assigned_caregiver || 'Not assigned yet'}</p>
+                      </div>
                     </div>
-                  </div>
+                    <div style={{ marginTop: '1rem', padding: '1rem 1.1rem', borderRadius: '16px', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC' }}>
+                      <p style={{ margin: 0, color: '#155E75', fontWeight: 700 }}>Latest update</p>
+                      <p style={{ margin: '0.4rem 0 0', color: '#164E63' }}>
+                        {latestMetrics.last_updated
+                          ? `Health telemetry was last refreshed on ${new Date(latestMetrics.last_updated).toLocaleString()}.`
+                          : 'No health telemetry has been recorded yet.'}
+                      </p>
+                    </div>
+                  </section>
+
+                  <aside style={{ ...sectionCardStyle, alignSelf: 'start' }}>
+                    <h3 style={{ margin: '0 0 1rem 0', color: 'var(--midnight-green)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <HeartPulse size={18} color="#0EA5E9" /> Health Snapshot
+                    </h3>
+                    <div style={{ display: 'grid', gap: '0.9rem' }}>
+                      <div style={{ padding: '1rem', borderRadius: '16px', backgroundColor: '#F8FBFD', border: '1px solid #DCE9EF' }}>
+                        <p style={{ margin: 0, color: 'var(--text-light)', fontWeight: 700 }}>Latest Social Score</p>
+                        <p style={{ margin: '0.35rem 0 0', color: 'var(--midnight-green)', fontSize: '1.4rem', fontWeight: 700 }}>
+                          {typeof latestMetrics.social_score === 'number' ? latestMetrics.social_score.toFixed(1) : 'N/A'}
+                        </p>
+                      </div>
+                      <div style={{ padding: '1rem', borderRadius: '16px', backgroundColor: '#F8FBFD', border: '1px solid #DCE9EF' }}>
+                        <p style={{ margin: 0, color: 'var(--text-light)', fontWeight: 700 }}>Average Gait Speed</p>
+                        <p style={{ margin: '0.35rem 0 0', color: 'var(--midnight-green)', fontSize: '1.4rem', fontWeight: 700 }}>
+                          {typeof data?.average_gait_speed_7d === 'number' ? `${data.average_gait_speed_7d.toFixed(2)} m/s` : 'N/A'}
+                        </p>
+                      </div>
+                      <div style={{ padding: '1rem', borderRadius: '16px', backgroundColor: '#FFF7ED', border: '1px solid #FCD34D' }}>
+                        <p style={{ margin: 0, color: '#9A3412', fontWeight: 700 }}>Last 24 Hours</p>
+                        <p style={{ margin: '0.35rem 0 0', color: '#7C2D12' }}>
+                          {dailySummary?.incidents_last_24h ?? 0} incident(s) and {dailySummary?.metrics_recorded_today ?? 0} metric update(s).
+                        </p>
+                      </div>
+                    </div>
+                  </aside>
                 </div>
               </>
+            )}
+          </div>
+        )}
+
+        {activePage === 'activity' && (
+          <div style={{ padding: '3rem' }}>
+            <header style={{ marginBottom: '2rem' }}>
+              <h1 style={{ color: 'var(--midnight-green)', margin: 0 }}>Daily Activity Reports</h1>
+              <p style={{ color: 'var(--text-light)', margin: '0.35rem 0 0' }}>
+                A readable timeline of today&apos;s activity for {resident?.name || data?.resident_name}.
+              </p>
+            </header>
+            {errorMsg ? (
+              <div style={{ ...sectionCardStyle, textAlign: 'center', padding: '3rem' }}>
+                <AlertCircle size={48} color="var(--cadet-gray)" style={{ marginBottom: '1rem' }} />
+                <h2 style={{ color: 'var(--midnight-green)', marginBottom: '1rem' }}>Dashboard Unavailable</h2>
+                <p style={{ color: 'var(--text-light)', fontSize: '1.1rem' }}>{errorMsg}</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                {activityReport.length > 0 ? (
+                  activityReport.map((item, idx) => {
+                    const isIncident = item.kind === 'incident';
+                    return (
+                      <article
+                        key={`${item.kind}-${item.timestamp}-${idx}`}
+                        style={{
+                          backgroundColor: 'white',
+                          borderRadius: '18px',
+                          boxShadow: 'var(--box-shadow)',
+                          padding: '1.25rem 1.35rem',
+                          borderLeft: `4px solid ${isIncident ? '#EF4444' : '#0EA5E9'}`,
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                          <div>
+                            <p style={{ margin: 0, color: isIncident ? '#B91C1C' : '#075985', fontWeight: 700 }}>
+                              {item.title} {item.severity ? `• ${item.severity}` : ''}
+                            </p>
+                            <p style={{ margin: '0.45rem 0 0', color: 'var(--text-dark)' }}>{item.summary}</p>
+                            <p style={{ margin: '0.35rem 0 0', color: 'var(--text-light)', fontSize: '0.85rem' }}>
+                              {item.zone ? `Zone: ${item.zone}` : 'Resident-level update'}
+                            </p>
+                          </div>
+                          <div style={{ color: 'var(--text-light)', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                            {new Date(item.timestamp).toLocaleString()}
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })
+                ) : (
+                  <div style={{ ...sectionCardStyle, textAlign: 'center', padding: '3rem' }}>
+                    <Activity size={48} color="var(--moonstone)" style={{ marginBottom: '1rem', opacity: 0.5 }} />
+                    <p style={{ color: 'var(--text-light)', margin: 0 }}>No daily activity reports are available yet.</p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -1122,8 +1200,8 @@ function FamilyDashboard({ token, onLogout }) {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {data?.recent_incidents && data.recent_incidents.length > 0 ? (
-                  data.recent_incidents.map((incident, idx) => {
+                {recentIncidents.length > 0 ? (
+                  recentIncidents.map((incident, idx) => {
                     const c = getIncidentColor(incident.type);
                     return (
                       <div key={idx} style={{ padding: '1.5rem', borderLeft: `4px solid ${c.border}`, backgroundColor: 'white', borderRadius: '0 var(--border-radius-sm) var(--border-radius-sm) 0', boxShadow: 'var(--box-shadow)' }}>
@@ -1164,7 +1242,7 @@ export default function Dashboard() {
     navigate('/login');
   };
 
-  let role = 'FAMILY';
+  let role = null;
   try {
     const base64Url = token.split('.')[1];
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
@@ -1178,5 +1256,8 @@ export default function Dashboard() {
   if (role === 'CAREGIVER' || role === 'ADMIN') {
     return <StaffDashboard token={token} onLogout={handleLogout} role={role} />;
   }
-  return <FamilyDashboard token={token} onLogout={handleLogout} />;
+  if (role === 'FAMILY') {
+    return <FamilyDashboard token={token} onLogout={handleLogout} />;
+  }
+  return <Navigate to="/login" replace />;
 }
