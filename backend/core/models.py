@@ -41,6 +41,12 @@ class Resident(models.Model):
         choices=RiskLevelChoices.choices, 
         default=RiskLevelChoices.LOW
     )
+    photo = models.ImageField(
+        upload_to='resident_photos/',
+        null=True,
+        blank=True,
+        help_text='Photo du résident utilisée pour la reconnaissance faciale',
+    )
     assigned_caregiver = models.ForeignKey(
         CustomUser, 
         on_delete=models.SET_NULL, 
@@ -60,6 +66,27 @@ class Resident(models.Model):
 
     def __str__(self):
         return f"{self.name} - Room {self.room_number}"
+
+
+class FaceEncoding(models.Model):
+    """Stocke l'encodage facial 128-dim d'un résident (calculé depuis sa photo)."""
+    resident = models.OneToOneField(
+        Resident,
+        on_delete=models.CASCADE,
+        related_name='face_encoding',
+    )
+    encoding_json = models.TextField(
+        help_text='Encodage facial sérialisé en JSON (vecteur 128-dim face_recognition)'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Face Encoding'
+        verbose_name_plural = 'Face Encodings'
+
+    def __str__(self):
+        return f"FaceEncoding — {self.resident.name}"
 
 class Device(models.Model):
     class TypeChoices(models.TextChoices):

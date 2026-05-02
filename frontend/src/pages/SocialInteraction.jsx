@@ -9,7 +9,7 @@ import {
 import {
   Camera, Upload, StopCircle, Play,
   AlertTriangle, CheckCircle, Clock,
-  Users, TrendingUp, Video,
+  Users, TrendingUp, Video, Eye,
 } from 'lucide-react';
 
 const API_HOST = typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1';
@@ -175,6 +175,14 @@ export default function SocialInteraction({
   const [detailsError, setDetailsError] = useState('');
   const [residentDirectory, setResidentDirectory] = useState([]);
 
+  // ── Face Recognition (webcam live) ───────────────────────────
+  const faceCanvasRef                       = useRef(null);
+  const faceIntervalRef                     = useRef(null);
+  const [faceEnabled, setFaceEnabled]       = useState(false);
+  const [faceResults, setFaceResults]       = useState([]);
+  const [faceError, setFaceError]           = useState('');
+  const [faceSupported, setFaceSupported]   = useState(true);
+
   const authHeader = { Authorization: `Bearer ${token}` };
 
   const hydrateLocalSessions = useCallback(() => {
@@ -197,16 +205,30 @@ export default function SocialInteraction({
   }, [token, hydrateLocalSessions]); // eslint-disable-line
 
   const fetchResidents = useCallback(async () => {
-    try {
-      const response = await axios.get(`${API_BASE}/mobile/dashboard/`, { headers: authHeader });
-      const residents = Array.isArray(response.data) ? response.data : [];
-      const normalized = residents
-        .filter((resident) => resident?.id)
-        .map((resident) => ({ id: Number(resident.id), name: resident.name }))
-        .sort((a, b) => a.id - b.id);
-      setResidentDirectory(normalized);
-    } catch (error) {
-      if (error.response?.status === 401) onLogout();
+    // Try the dedicated residents endpoint first (returns photo_url + has_face_encoding).
+    // Fall back to the mobile dashboard if the endpoint is unavailable.
+    const tryUrls = [
+      `${API_BASE}/residents/`,
+      `${API_BASE}/mobile/dashboard/`,
+    ];
+    for (const url of tryUrls) {
+      try {
+        const response = await axios.get(url, { headers: authHeader });
+        const residents = Array.isArray(response.data) ? response.data : [];
+        const normalized = residents
+          .filter((r) => r?.id)
+          .map((r) => ({
+            id:        Number(r.id),
+            name:      r.name   || `Résident #${r.id}`,
+            photo_url: r.photo_url || null,
+          }))
+          .sort((a, b) => a.id - b.id);
+        setResidentDirectory(normalized);
+        return;
+      } catch (error) {
+        if (error.response?.status === 401) { onLogout(); return; }
+        // try next url
+      }
     }
   }, [token]); // eslint-disable-line
 
@@ -245,6 +267,82 @@ export default function SocialInteraction({
       setDetailsLoading(false);
     }
   };
+
+  // ── Face Recognition helpers ──────────────────────────────
+  /**
+   * Capture une frame depuis le <video> et l'envoie à /api/face/identify/.
+   * Les résultats sont stockés dans faceResults et dessinés sur faceCanvasRef.
+   */
+  const runFaceRecognition = useCallback(async () => {
+    const video  = videoRef.current;
+    const canvas = faceCanvasRef.current;
+    if (!video || !canvas || video.readyState < 2) return;
+
+    // Capture de la frame courante
+    const ctx = canvas.getContext('2d');
+    canvas.width  = video.videoWidth  || 640;
+    canvas.height = video.videoHeight || 480;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const frameB64 = canvas.toDataURL('image/jpeg', 0.75).split(',')[1];
+
+    try {
+      const res = await axios.post(
+        `${API_BASE}/face/identify/`,
+        { frame_b64: frameB64 },
+        { headers: authHeader, timeout: 5000 },
+      );
+      const faces = res.data.faces || [];
+      setFaceResults(faces);
+      setFaceError('');
+
+      // Dessin des boîtes sur le canvas
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      faces.forEach(face => {
+        const { top, right, bottom, left } = face.location;
+        const identified = face.resident_id !== null;
+        ctx.strokeStyle  = identified ? '#10B981' : '#F59E0B';
+        ctx.lineWidth    = 3;
+        ctx.strokeRect(left, top, right - left, bottom - top);
+
+        // Label
+        const label = identified
+          ? `${face.resident_name} (${face.confidence}%)`
+          : 'Inconnu';
+        ctx.fillStyle = identified ? '#10B981' : '#F59E0B';
+        ctx.fillRect(left, top - 22, ctx.measureText(label).width + 10, 22);
+        ctx.fillStyle = 'white';
+        ctx.font      = 'bold 13px sans-serif';
+        ctx.fillText(label, left + 5, top - 6);
+      });
+    } catch (e) {
+      if (e.response?.status === 503) {
+        setFaceSupported(false);
+        setFaceError('face_recognition non installé sur le serveur.');
+        stopFaceRecognition();
+      }
+      // Timeout / réseau : on réessaiera au prochain tick
+    }
+  }, [token]); // eslint-disable-line
+
+  const startFaceRecognition = () => {
+    if (!faceSupported) return;
+    setFaceEnabled(true);
+    setFaceResults([]);
+    setFaceError('');
+    // Intervalle de 1,5 s pour limiter la charge serveur
+    faceIntervalRef.current = setInterval(runFaceRecognition, 1500);
+  };
+
+  const stopFaceRecognition = () => {
+    clearInterval(faceIntervalRef.current);
+    setFaceEnabled(false);
+    // Effacement du canvas
+    const canvas = faceCanvasRef.current;
+    if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  // Nettoyage à l'arrêt du composant
+  useEffect(() => () => { clearInterval(faceIntervalRef.current); }, []);
 
   // ── Webcam ────────────────────────────────────────────────
   const startWebcam = async () => {
@@ -294,6 +392,7 @@ export default function SocialInteraction({
   const stopWebcam = async () => {
     clearInterval(rtIntervalRef.current);
     clearInterval(durIntervalRef.current);
+    stopFaceRecognition();   // ← arrêt de la reconnaissance faciale
     setRtSaving(true);
     setRtActive(false);
 
@@ -472,12 +571,22 @@ export default function SocialInteraction({
   const rtPct   = Math.round(rtCounters.iso / rtTotal * 100);
   const formatResidentTrack = useCallback((trackId) => {
     const raw = String(trackId || 'Unknown');
+    // track_id can be a plain number ("3") or "ID3" — extract the numeric part
     const match = raw.match(/(\d+)/);
     if (!match) return raw;
-    const trackIndex = Number(match[1]) - 1;
-    if (trackIndex < 0 || trackIndex >= residentDirectory.length) return raw;
-    const resident = residentDirectory[trackIndex];
-    return `ID${resident.id} - ${resident.name}`;
+    const numericId = Number(match[1]);
+    // Look up by exact resident ID (not by positional index)
+    const resident = residentDirectory.find((r) => r.id === numericId);
+    if (!resident) return raw;
+    return `${resident.name}`;
+  }, [residentDirectory]);
+
+  /** Returns the full resident object (id, name, photo_url) for a given trackId, or null. */
+  const resolveResident = useCallback((trackId) => {
+    const raw = String(trackId || '');
+    const match = raw.match(/(\d+)/);
+    if (!match) return null;
+    return residentDirectory.find((r) => r.id === Number(match[1])) || null;
   }, [residentDirectory]);
   const isolatedEvents = Array.isArray(sessionDetails?.events)
     ? sessionDetails.events.filter((event) => event.event_type === 'isole')
@@ -678,7 +787,18 @@ export default function SocialInteraction({
                 </div>
               )}
               <video ref={videoRef} muted playsInline
-                style={{ display:rtActive ? 'block':'none', width:'100%', height:'100%', objectFit:'cover' }} />
+                style={{ display:rtActive ? 'block':'none', width:'100%', height:'100%', objectFit:'cover', position:'absolute', top:0, left:0 }} />
+
+              {/* Canvas overlay pour la reconnaissance faciale */}
+              <canvas
+                ref={faceCanvasRef}
+                style={{
+                  display: faceEnabled ? 'block' : 'none',
+                  position: 'absolute', top: 0, left: 0,
+                  width: '100%', height: '100%',
+                  pointerEvents: 'none',
+                }}
+              />
 
               {/* HUD */}
               {rtActive && <>
@@ -734,7 +854,7 @@ export default function SocialInteraction({
                   <Play size={16} /> Start
                 </button>
               )}
-              {rtActive && (
+              {rtActive && (<>
                 <button onClick={stopWebcam} style={{
                   flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8,
                   padding:'13px', borderRadius:'var(--border-radius-sm)',
@@ -743,8 +863,35 @@ export default function SocialInteraction({
                 }}>
                   <StopCircle size={16} /> Stop &amp; Save
                 </button>
-              )}
+
+                {/* Bouton Reconnaissance Faciale */}
+                {faceSupported && (
+                  <button
+                    onClick={faceEnabled ? stopFaceRecognition : startFaceRecognition}
+                    title={faceEnabled ? 'Désactiver la reconnaissance faciale' : 'Activer la reconnaissance faciale'}
+                    style={{
+                      display:'flex', alignItems:'center', justifyContent:'center', gap:7,
+                      padding:'13px 16px', borderRadius:'var(--border-radius-sm)',
+                      border:'none', cursor:'pointer', fontWeight:700, fontSize:13,
+                      background: faceEnabled ? '#10B981' : '#F0FDFA',
+                      color: faceEnabled ? 'white' : '#059669',
+                      transition:'all .2s', whiteSpace:'nowrap',
+                    }}
+                  >
+                    <Eye size={15} />
+                    {faceEnabled ? 'ID ON' : 'Identifier'}
+                  </button>
+                )}
+              </>)}
             </div>
+
+            {/* Erreur face recognition */}
+            {faceError && (
+              <div style={{ marginTop:10, padding:'8px 12px', background:'#FEF3C7',
+                borderRadius:'var(--border-radius-sm)', fontSize:12, color:'#B45309', fontWeight:600 }}>
+                ⚠ {faceError}
+              </div>
+            )}
 
             {/* Saved banner */}
             {rtSaved && (
@@ -824,6 +971,70 @@ export default function SocialInteraction({
                 </div>
               ))}
             </Card>
+
+            {/* ── Face Recognition Panel ── */}
+            {faceEnabled && (
+              <Card style={{ padding:'14px 16px' }}>
+                <div style={{ fontWeight:700, fontSize:13, color:'var(--midnight-green)',
+                  marginBottom:10, display:'flex', alignItems:'center', gap:7 }}>
+                  <Eye size={14} color="#10B981" />
+                  Reconnaissance faciale en direct
+                  <span style={{ marginLeft:'auto', background:'#D1FAE5', color:'#065F46',
+                    borderRadius:99, padding:'2px 9px', fontSize:10, fontWeight:800 }}>
+                    LIVE
+                  </span>
+                </div>
+
+                {faceResults.length === 0 ? (
+                  <p style={{ color:'var(--text-light)', fontSize:12, textAlign:'center', padding:'12px 0' }}>
+                    En attente de détection de visages…
+                  </p>
+                ) : faceResults.map((face, i) => (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:10,
+                    padding:'8px 0', borderBottom:'1px solid #F8FAFC' }}>
+                    {/* Avatar */}
+                    <div style={{
+                      width:38, height:38, borderRadius:'50%', flexShrink:0, overflow:'hidden',
+                      border:'2px solid', borderColor: face.resident_id ? '#10B981' : '#F59E0B',
+                      background:'#F1F5F9', display:'flex', alignItems:'center', justifyContent:'center',
+                    }}>
+                      {face.photo_url ? (
+                        <img src={face.photo_url} alt={face.resident_name}
+                          style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                      ) : (
+                        <Users size={18} color="#94A3B8" />
+                      )}
+                    </div>
+
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontWeight:700, fontSize:13,
+                        color: face.resident_id ? 'var(--midnight-green)' : '#B45309',
+                        overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        {face.resident_name}
+                      </div>
+                      {face.confidence && (
+                        <div style={{ fontSize:11, color:'var(--text-light)' }}>
+                          Confiance : {face.confidence}%
+                        </div>
+                      )}
+                    </div>
+
+                    <span style={{
+                      padding:'3px 9px', borderRadius:99, fontSize:10, fontWeight:800,
+                      background: face.resident_id ? '#D1FAE5' : '#FEF3C7',
+                      color: face.resident_id ? '#065F46' : '#B45309',
+                    }}>
+                      {face.resident_id ? '✓ Identifié' : '? Inconnu'}
+                    </span>
+                  </div>
+                ))}
+
+                <p style={{ margin:'10px 0 0', fontSize:11, color:'var(--text-light)' }}>
+                  {faceResults.length} visage(s) dans la frame ·{' '}
+                  {faceResults.filter(f => f.resident_id).length} identifié(s)
+                </p>
+              </Card>
+            )}
           </div>
         </div>
       )}
@@ -1028,13 +1239,40 @@ export default function SocialInteraction({
                     <div style={{ marginBottom:'1rem' }}>
                       <h4 style={{ margin:'0 0 0.5rem', color:'var(--midnight-green)' }}>Detected isolated people</h4>
                       <div style={{ display:'grid', gap:'0.75rem' }}>
-                        {isolatedSummaries.map((item) => (
+                        {isolatedSummaries.map((item) => {
+                          const resident = resolveResident(item.track_id);
+                          return (
                           <div key={item.track_id} style={{ border:'1px solid #E2E8F0', borderRadius:'14px', padding:'1rem' }}>
                             <div style={{ display:'flex', justifyContent:'space-between', gap:'1rem', flexWrap:'wrap' }}>
-                              <div>
-                                <div style={{ fontWeight:800, color:'var(--midnight-green)' }}>{formatResidentTrack(item.track_id)}</div>
-                                <div style={{ color:'var(--text-light)', fontSize:12 }}>
-                                  First seen at {item.first_seen}s · Last seen at {item.last_seen}s
+                              <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
+                                {/* Resident avatar */}
+                                {resident?.photo_url ? (
+                                  <img
+                                    src={resident.photo_url}
+                                    alt={resident.name}
+                                    style={{
+                                      width: 44, height: 44, borderRadius: '50%',
+                                      objectFit: 'cover', flexShrink: 0,
+                                      border: '2px solid #FCA5A5',
+                                    }}
+                                  />
+                                ) : (
+                                  <div style={{
+                                    width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+                                    background: 'linear-gradient(135deg, var(--moonstone), var(--midnight-green))',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    color: 'white', fontWeight: 800, fontSize: 16,
+                                  }}>
+                                    {(resident?.name || '?')[0].toUpperCase()}
+                                  </div>
+                                )}
+                                <div>
+                                  <div style={{ fontWeight:800, color:'var(--midnight-green)' }}>
+                                    {formatResidentTrack(item.track_id)}
+                                  </div>
+                                  <div style={{ color:'var(--text-light)', fontSize:12 }}>
+                                    First seen at {item.first_seen}s · Last seen at {item.last_seen}s
+                                  </div>
                                 </div>
                               </div>
                               <div style={{ textAlign:'right' }}>
@@ -1043,22 +1281,44 @@ export default function SocialInteraction({
                               </div>
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
 
                     <div>
                       <h4 style={{ margin:'0 0 0.5rem', color:'var(--midnight-green)' }}>Isolation timeline</h4>
                       <div style={{ display:'grid', gap:'0.65rem' }}>
-                        {isolatedEvents.map((event, index) => (
+                        {isolatedEvents.map((event, index) => {
+                          const resident = resolveResident(event.track_id);
+                          return (
                           <div key={`${event.track_id}-${event.timestamp_seconds}-${index}`} style={{ display:'flex', justifyContent:'space-between', gap:'1rem', padding:'0.9rem 1rem', borderRadius:'12px', background:'#F8FAFC' }}>
-                            <div>
-                              <div style={{ fontWeight:700, color:'var(--midnight-green)' }}>{formatResidentTrack(event.track_id)}</div>
-                              <div style={{ color:'var(--text-light)', fontSize:12 }}>Detected at {event.timestamp_seconds}s</div>
+                            <div style={{ display:'flex', alignItems:'center', gap:'0.65rem' }}>
+                              {resident?.photo_url ? (
+                                <img
+                                  src={resident.photo_url}
+                                  alt={resident.name}
+                                  style={{ width:32, height:32, borderRadius:'50%', objectFit:'cover', flexShrink:0, border:'2px solid #FCA5A5' }}
+                                />
+                              ) : (
+                                <div style={{
+                                  width:32, height:32, borderRadius:'50%', flexShrink:0,
+                                  background:'linear-gradient(135deg, var(--moonstone), var(--midnight-green))',
+                                  display:'flex', alignItems:'center', justifyContent:'center',
+                                  color:'white', fontWeight:800, fontSize:13,
+                                }}>
+                                  {(resident?.name || '?')[0].toUpperCase()}
+                                </div>
+                              )}
+                              <div>
+                                <div style={{ fontWeight:700, color:'var(--midnight-green)' }}>{formatResidentTrack(event.track_id)}</div>
+                                <div style={{ color:'var(--text-light)', fontSize:12 }}>Detected at {event.timestamp_seconds}s</div>
+                              </div>
                             </div>
                             <Pill type="isole" />
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   </>

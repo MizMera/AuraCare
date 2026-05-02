@@ -1,4 +1,10 @@
 from django.urls import path
+from .face_recognition_views import (
+    ResidentPhotoUploadView,
+    ResidentListView,
+    FaceIdentifyView,
+    FaceEncodingStatusView,
+)
 from .views import (
     TelemetryIngestView,
     IncidentIngestView,
@@ -89,4 +95,12 @@ urlpatterns = [
     path('stream/aggression/stop/', AggressionStreamStopView.as_view(), name='stream-aggression-stop'),
     path('stream/aggression/status/', AggressionStreamStatusView.as_view(), name='stream-aggression-status'),
     path('stream/aggression/feed/', aggression_stream_feed, name='stream-aggression-feed'),
+
+    # Residents
+    path('residents/', ResidentListView.as_view(), name='resident-list'),
+    path('residents/<int:resident_id>/photo/', ResidentPhotoUploadView.as_view(), name='resident-photo'),
+
+    # Facial Recognition
+    path('face/identify/', FaceIdentifyView.as_view(), name='face-identify'),
+    path('face/status/', FaceEncodingStatusView.as_view(), name='face-status'),
 ]
