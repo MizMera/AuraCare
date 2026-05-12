@@ -18,6 +18,16 @@ The core objective of AuraCare is to bridge the gap between continuous resident 
   - Wandering & Unexpected Absences
 - **Zone & Schedule Management**: Monitors expected resident locations based on daily schedules to detect anomalies (e.g., a resident missing from the dining hall during mealtime).
 
+## Model Integration
+
+- The `models/modelayoub` pipeline is integrated as a separate, launchable workflow.
+- It stays isolated from the existing detection modules and runs through its own backend adapter.
+- Backend endpoints:
+  - `POST /api/models/modelayoub/launch/`
+  - `GET /api/models/modelayoub/status/`
+  - `GET /api/models/modelayoub/artifacts/`
+- Its outputs remain in `models/modelayoub/tracking_results/` and are surfaced to the dashboard through JSON summaries and artifact listings.
+
 ## 🛠️ Technology Stack
 
 - **Backend Architecture**: Built with Django (Python) for robust data modeling and secure API management.

@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import { Activity } from 'lucide-react';
 
 export default function Header() {
   return (
@@ -14,8 +13,9 @@ export default function Header() {
           <a href="#services">AI Modules</a>
           <a href="#process">How It Works</a>
         </nav>
-        <div className="header-actions">
-          <Link to="/login" className="btn btn-primary">Dashboard Login</Link>
+        <div className="header-actions" style={{ display: 'flex', gap: '0.85rem', alignItems: 'center' }}>
+          <Link to="/login" className="btn header-top-btn header-top-btn-secondary">Family Portal</Link>
+          <Link to="/login" className="btn header-top-btn header-top-btn-primary">Dashboard Login</Link>
         </div>
       </div>
     </header>
