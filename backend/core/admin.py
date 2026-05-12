@@ -1,8 +1,10 @@
 from django.contrib import admin
+from django.contrib import messages
 from django.contrib.auth.admin import UserAdmin
 from .models import (
     CustomUser, Resident, Zone, Device,
-    HealthMetric, Incident, ScheduleEvent, MealTime, Notification, GaitObservation
+    HealthMetric, Incident, ScheduleEvent, MealTime, Notification, GaitObservation,
+    ResidentEnrollmentImage, DailySummary,
 )
 
 @admin.register(MealTime)
@@ -40,11 +42,49 @@ class ZoneAdmin(admin.ModelAdmin):
     list_display = ('name', 'type', 'floor_type')
     search_fields = ('name', 'type')
 
+class ResidentEnrollmentImageInline(admin.StackedInline):
+    model = ResidentEnrollmentImage
+    extra = 5
+    max_num = 5
+    fields = ('image',)
+    verbose_name = 'Enrollment Photo'
+    verbose_name_plural = 'Enrollment Photos (5 required for face recognition)'
+
+
 @admin.register(Resident)
 class ResidentAdmin(admin.ModelAdmin):
     list_display = ('name', 'room_number', 'risk_level', 'assigned_caregiver', 'family_member')
     list_filter = ('risk_level',)
     search_fields = ('name', 'room_number')
+    inlines = [ResidentEnrollmentImageInline]
+    exclude = ('photo',)
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        resident = form.instance
+        image_count = resident.enrollment_images.count()
+        if image_count > 0:
+            try:
+                from .machine7_bridge import sync_machine7_resident_enrollment
+                result = sync_machine7_resident_enrollment(resident)
+                if result.get('synced'):
+                    self.message_user(
+                        request,
+                        f'"{resident.name}" enrolled in machine7 face recognition ({image_count} photo(s)).',
+                        level=messages.SUCCESS,
+                    )
+                else:
+                    self.message_user(
+                        request,
+                        f'Saved, but machine7 enrollment skipped: {result.get("error")}',
+                        level=messages.WARNING,
+                    )
+            except Exception as exc:
+                self.message_user(
+                    request,
+                    f'Saved, but machine7 enrollment error: {exc}',
+                    level=messages.WARNING,
+                )
 
 @admin.register(Device)
 class DeviceAdmin(admin.ModelAdmin):
@@ -90,3 +130,17 @@ class MedicationLogAdmin(admin.ModelAdmin):
 class AdherenceRiskScoreAdmin(admin.ModelAdmin):
     list_display = ['resident', 'score', 'risk_level', 'predicted_for', 'contributing_factors']
     list_filter = ['risk_level', 'model_version']
+
+
+@admin.register(ResidentEnrollmentImage)
+class ResidentEnrollmentImageAdmin(admin.ModelAdmin):
+    list_display = ('resident', 'created_at')
+    search_fields = ('resident__name', 'resident__resident_code')
+
+
+@admin.register(DailySummary)
+class DailySummaryAdmin(admin.ModelAdmin):
+    list_display = ('resident', 'date', 'zone', 'device', 'created_at')
+    list_filter = ('date', 'zone')
+    search_fields = ('resident__name', 'location', 'summary_text')
+

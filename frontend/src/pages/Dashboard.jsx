@@ -3,8 +3,9 @@ import { Navigate, useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import {
-  LogOut, Activity, AlertCircle, ShieldAlert, Users, HeartPulse, Video,
-  Eye, Brain, UtensilsCrossed, Clock3, Plus, Pencil, Trash2, CheckCircle2, Sparkles,Pill
+  LogOut, Activity, AlertCircle, ShieldAlert, Users, Video,
+  Eye, Brain, UtensilsCrossed, Clock3, Plus, Pencil, Trash2, CheckCircle2, Sparkles, Pill,
+  Camera, FileText,
 } from 'lucide-react';
 import SocialInteraction from './SocialInteraction';
 import WanderingDetection from './WanderingDetection';
@@ -112,6 +113,40 @@ const logoutBtnStyle = {
   fontWeight: 700,
   transition: 'transform 0.18s ease, background-color 0.18s ease',
 };
+const logTabBtnStyle = (active) => ({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.45rem',
+  padding: '0.7rem 1rem',
+  borderRadius: '12px',
+  border: `1px solid ${active ? 'var(--moonstone)' : '#D7E3EA'}`,
+  backgroundColor: active ? '#EAF7FA' : 'white',
+  color: active ? 'var(--midnight-green)' : 'var(--text-light)',
+  fontWeight: active ? 700 : 600,
+  fontSize: '0.92rem',
+  cursor: 'pointer',
+  transition: 'all 0.18s ease',
+});
+const logAlertStyle = (tone) => ({
+  padding: '0.9rem 1rem',
+  borderRadius: '12px',
+  border: tone === 'error' ? '1px solid #F5C2C7' : '1px solid #BFE7DB',
+  backgroundColor: tone === 'error' ? '#FEF2F2' : '#F0FDFA',
+  color: tone === 'error' ? '#B91C1C' : 'var(--midnight-green)',
+  boxShadow: 'var(--box-shadow)',
+});
+const logInfoTileStyle = {
+  padding: '1rem',
+  backgroundColor: '#F9FCFE',
+  borderRadius: '12px',
+  border: '1px solid #D7E3EA',
+};
+const logInsetPanelStyle = {
+  padding: '1rem',
+  backgroundColor: '#F9FCFE',
+  borderRadius: '14px',
+  border: '1px solid #D7E3EA',
+};
 
 function getIncidentColor(type) {
   return INCIDENT_COLORS[type] || DEFAULT_COLOR;
@@ -119,11 +154,69 @@ function getIncidentColor(type) {
 
 
 
+/* ── Log-Activities helpers ──────────────────────────────────────── */
+function formatTimestamp(value) {
+  if (!value) return 'No recent signal';
+  const ms = typeof value === 'number' ? value * 1000 : Date.parse(value);
+  if (Number.isNaN(ms)) return 'No recent signal';
+  return new Date(ms).toLocaleString();
+}
+
+function formatDurationWords(seconds) {
+  const s = Math.max(0, Math.round(seconds));
+  if (s === 0) return '0 seconds';
+  if (s < 60) return `${s} second${s !== 1 ? 's' : ''}`;
+  const m = Math.round(s / 60);
+  return `${m} minute${m !== 1 ? 's' : ''}`;
+}
+
+function formatHistoryEntry(entry) {
+  const name = entry.name || 'Unknown';
+  const location = entry.location || 'Unknown location';
+  const rawText = entry.summary_text || '';
+  const bracketMatch = rawText.match(/\[([^\]]+)\]/);
+  if (bracketMatch) {
+    const parts = {};
+    bracketMatch[1].split(',').forEach((p) => {
+      const [act, val] = p.split('=');
+      if (act && val) parts[act.trim()] = parseFloat(val);
+    });
+    const standing = parts.standing || 0;
+    const sitting = parts.sitting || 0;
+    const walking = parts.walking || 0;
+    const total = standing + sitting + walking;
+    return (
+      `${name} was detected in ${location} for ${formatDurationWords(total)}. ` +
+      `Standing: ${formatDurationWords(standing)}, Sitting: ${formatDurationWords(sitting)}, Walking: ${formatDurationWords(walking)}.`
+    );
+  }
+  return rawText.replace(/\[.*?\]/g, '').trim() || 'No summary available.';
+}
+
+function getCameraSourceType(source) {
+  if (!source) return 'none';
+  const s = String(source).trim().toLowerCase();
+  if (s.startsWith('rtsp://')) return 'rtsp';
+  if (s.endsWith('.m3u8') || s.includes('.m3u8?')) return 'hls';
+  if (s.endsWith('.mp4') || s.includes('.mp4?')) return 'video';
+  if (s.endsWith('.mjpg') || s.endsWith('.mjpeg') || s.includes('/mjpg') || s.includes('/mjpeg')) return 'mjpeg';
+  if (s.startsWith('http://') || s.startsWith('https://')) return 'web';
+  return 'unknown';
+}
+
+function EmptyLogPanel({ title, message }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '2rem', backgroundColor: 'var(--alice-blue)', borderRadius: '12px' }}>
+      <h3 style={{ color: 'var(--midnight-green)', marginTop: 0, marginBottom: '0.5rem' }}>{title}</h3>
+      <p style={{ color: 'var(--text-light)', margin: 0 }}>{message}</p>
+    </div>
+  );
+}
+/* ─────────────────────────────────────────────────────────────────── */
+
 function StaffDashboard({ token, onLogout, role }) {
-  const [residents, setResidents] = useState(null);
   const [facilityIncidents, setFacilityIncidents] = useState([]);
-  const [staffSection, setStaffSection] = useState('residents');
-  const [errorMsg, setErrorMsg] = useState('');
+  const [staffSection, setStaffSection] = useState('residents-db');
   const [loading, setLoading] = useState(true);
   const [streamRunning, setStreamRunning] = useState(false);
   const [streamLoading, setStreamLoading] = useState(false);
@@ -131,23 +224,36 @@ function StaffDashboard({ token, onLogout, role }) {
   const [streamKey, setStreamKey] = useState(0);
   const streamPollRef = useRef(null);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  /* ── Log-Activities state ───────────────────────────────────────── */
+  const [logActivitiesTab, setLogActivitiesTab] = useState('camera');
+  const [busyStartingModels, setBusyStartingModels] = useState(false);
+  const [busyStoppingModels, setBusyStoppingModels] = useState(false);
+  const [runModelsMessage, setRunModelsMessage] = useState('');
+  const [runModelsError, setRunModelsError] = useState('');
+  const [generateMessage, setGenerateMessage] = useState('');
+  const [logCameras, setLogCameras] = useState([]);
+  const [selectedLogCameraId, setSelectedLogCameraId] = useState('');
+  const [cameraDetectionPayload, setCameraDetectionPayload] = useState(null);
+  const [cameraDetectionError, setCameraDetectionError] = useState('');
+  const [localCameras, setLocalCameras] = useState([]);
+  const [selectedLocalCameraId, setSelectedLocalCameraId] = useState('');
+  const [localCameraError, setLocalCameraError] = useState('');
+  const [localCameraReady, setLocalCameraReady] = useState(false);
+  const [livePreviewUrl, setLivePreviewUrl] = useState('');
+  const [pipelineSummary, setPipelineSummary] = useState([]);
+  const [pipelineHistory, setPipelineHistory] = useState([]);
+  /* ─────────────────────────────────────────────────────────────────── */
   const handleRecordingSuccess = () => {
     setRefreshKey(prev => prev + 1);
   };
   useEffect(() => {
     const fetchStaffDashboard = async () => {
       try {
-        const [dashboardResponse, incidentsResponse] = await Promise.all([
-          axios.get(`${API_BASE}/mobile/dashboard/`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_BASE}/mobile/facility-incidents/`, { headers: { Authorization: `Bearer ${token}` } }),
-        ]);
-        setResidents(dashboardResponse.data);
+        const incidentsResponse = await axios.get(`${API_BASE}/mobile/facility-incidents/`, { headers: { Authorization: `Bearer ${token}` } });
         setFacilityIncidents(incidentsResponse.data || []);
       } catch (err) {
         if (err.response?.status === 401) onLogout();
-        else if (err.response?.status === 404) setErrorMsg('No residents assigned to your shift yet.');
-        else if (err.response?.status === 403) setErrorMsg('Access forbidden. You might not have the correct role permissions.');
-        else setErrorMsg('An error occurred while fetching your dashboard.');
       } finally {
         setLoading(false);
       }
@@ -240,7 +346,191 @@ function StaffDashboard({ token, onLogout, role }) {
     };
   }, [streamRunning]);
 
+  /* ── Log-Activities: load cameras + pipeline data ──────────────── */
+  useEffect(() => {
+    if (staffSection !== 'logActivities') return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [camRes, sumRes, histRes] = await Promise.allSettled([
+          axios.get(`${API_BASE}/monitoring/cameras/`, { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get(`${API_BASE}/monitoring/summary/?window_hours=24`, { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get(`${API_BASE}/monitoring/history/?limit=120`, { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+        if (cancelled) return;
+        if (camRes.status === 'fulfilled') {
+          const list = camRes.value.data.cameras || [];
+          setLogCameras(list);
+          setSelectedLogCameraId((cur) => cur || (list[0] ? String(list[0].id) : ''));
+        }
+        if (sumRes.status === 'fulfilled') {
+          setPipelineSummary(Object.values(sumRes.value.data.summary || {}));
+        }
+        if (histRes.status === 'fulfilled') {
+          setPipelineHistory(histRes.value.data.history || []);
+        }
+      } catch { /* ignore */ }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [staffSection, token]);
+
+  /* ── Log-Activities: enumerate local PC cameras ─────────────────── */
+  useEffect(() => {
+    if (staffSection !== 'logActivities' || logActivitiesTab !== 'camera') return;
+    const enumerate = async () => {
+      if (!navigator.mediaDevices?.enumerateDevices) {
+        setLocalCameraError('This browser does not support camera detection.');
+        return;
+      }
+      try {
+        // Ask for camera permission so enumerateDevices returns real labels/IDs
+        let permStream = null;
+        try {
+          permStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        } catch { /* permission denied — enumerate anyway */ }
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        if (permStream) permStream.getTracks().forEach((t) => t.stop());
+        const video = devices.filter((d) => d.kind === 'videoinput').map((d, i) => ({
+          id: d.deviceId,
+          label: d.label || `PC Camera ${i + 1}`,
+        }));
+        // Always keep at least a placeholder so the Start button is enabled
+        const final = video.length ? video : [{ id: 'default', label: 'PC Camera 1' }];
+        setLocalCameras(final);
+        setSelectedLocalCameraId((cur) => cur || final[0]?.id || '');
+        setLocalCameraError('');
+      } catch {
+        // Even on error, insert a placeholder so the button stays enabled
+        setLocalCameras([{ id: 'default', label: 'PC Camera 1' }]);
+        setLocalCameraError('Unable to detect PC cameras — will use default camera.');
+      }
+    };
+    enumerate();
+  }, [staffSection, logActivitiesTab]);
+
+  /* ── Log-Activities: live-preview polling ────────────────────────── */
+  useEffect(() => {
+    if (staffSection !== 'logActivities' || logActivitiesTab !== 'camera') {
+      setLivePreviewUrl((u) => { if (u) URL.revokeObjectURL(u); return ''; });
+      return;
+    }
+    let cancelled = false;
+    let timerId = null;
+    const fetchFrame = async () => {
+      try {
+        const res = await axios.get(`${API_BASE}/monitoring/live-preview/`, {
+          headers: { Authorization: `Bearer ${token}` },
+          responseType: 'blob',
+        });
+        if (cancelled) return;
+        const next = URL.createObjectURL(res.data);
+        setLivePreviewUrl((cur) => { if (cur) URL.revokeObjectURL(cur); return next; });
+        setLocalCameraReady(true);
+      } catch (err) {
+        if (err.response?.status === 401) { onLogout(); return; }
+      } finally {
+        if (!cancelled) timerId = setTimeout(fetchFrame, 350);
+      }
+    };
+    fetchFrame();
+    return () => {
+      cancelled = true;
+      if (timerId) clearTimeout(timerId);
+      setLivePreviewUrl((u) => { if (u) URL.revokeObjectURL(u); return ''; });
+    };
+  }, [staffSection, logActivitiesTab, token, onLogout]);
+
+  /* ── Log-Activities: camera-detection polling ────────────────────── */
+  useEffect(() => {
+    if (!selectedLogCameraId) { setCameraDetectionPayload(null); return; }
+    let cancelled = false;
+    const fetch_ = async () => {
+      try {
+        const res = await axios.get(`${API_BASE}/monitoring/cameras/${selectedLogCameraId}/detections/`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!cancelled) { setCameraDetectionPayload(res.data); setCameraDetectionError(''); }
+      } catch (err) {
+        if (err.response?.status === 401) { onLogout(); return; }
+        if (!cancelled) setCameraDetectionError('Unable to fetch live camera detections right now.');
+      }
+    };
+    fetch_();
+    const id = setInterval(fetch_, 5000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [selectedLogCameraId, token, onLogout]);
+
+  const handleRunModels = async () => {
+    setBusyStartingModels(true);
+    setRunModelsMessage('');
+    setRunModelsError('');
+    try {
+      const realCameras = localCameras.filter((c) => c.id && c.id !== 'default');
+      const idx = realCameras.findIndex((c) => c.id === selectedLocalCameraId);
+      const cameraIndex = idx >= 0 ? idx : 0;
+      const res = await axios.post(`${API_BASE}/monitoring/start/`, {
+        available_only: false,
+        pc_camera_index: cameraIndex,
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      setRunModelsMessage(res.data?.using_machine7_models
+        ? `Machine7 models started on PC camera ${idx >= 0 ? idx : 0}.`
+        : 'Monitoring started (compatibility mode).');
+    } catch (err) {
+      if (err.response?.status === 401) { onLogout(); return; }
+      setRunModelsError(err.response?.data?.error || err.response?.data?.detail || 'Unable to start models right now.');
+    } finally {
+      setBusyStartingModels(false);
+    }
+  };
+
+  const handleStopModels = async () => {
+    setBusyStoppingModels(true);
+    setRunModelsMessage('');
+    setRunModelsError('');
+    setGenerateMessage('');
+    try {
+      const stopRes = await axios.post(`${API_BASE}/monitoring/stop/`, {}, { headers: { Authorization: `Bearer ${token}` } });
+      setLivePreviewUrl((u) => { if (u) URL.revokeObjectURL(u); return ''; });
+      setLocalCameraReady(false);
+      try {
+        const sumRes = await axios.get(`${API_BASE}/monitoring/generate-summary/`, { headers: { Authorization: `Bearer ${token}` } });
+        const count = Number(sumRes.data?.generated_count || 0);
+        setGenerateMessage(count > 0 ? `Generated ${count} summary snapshot(s).` : 'Detection stopped — no summary snapshots generated.');
+        if (sumRes.status === 200) {
+          const [sumData, histData] = await Promise.allSettled([
+            axios.get(`${API_BASE}/monitoring/summary/?window_hours=24`, { headers: { Authorization: `Bearer ${token}` } }),
+            axios.get(`${API_BASE}/monitoring/history/?limit=120`, { headers: { Authorization: `Bearer ${token}` } }),
+          ]);
+          if (sumData.status === 'fulfilled') setPipelineSummary(Object.values(sumData.value.data.summary || {}));
+          if (histData.status === 'fulfilled') setPipelineHistory(histData.value.data.history || []);
+        }
+      } catch (sumErr) {
+        if (sumErr.response?.status === 401) { onLogout(); return; }
+        setGenerateMessage(sumErr.response?.data?.error || 'Detection stopped, but summary generation failed.');
+      }
+      setRunModelsMessage(stopRes.data?.stopped ? 'Detection stopped.' : 'Stop signal sent.');
+    } catch (err) {
+      if (err.response?.status === 401) { onLogout(); return; }
+      setRunModelsError(err.response?.data?.error || err.response?.data?.detail || 'Unable to stop detection right now.');
+    } finally {
+      setBusyStoppingModels(false);
+    }
+  };
+
+  const handleStartCameraAndModels = async () => {
+    setLocalCameraError('');
+    await handleRunModels();
+  };
+  /* ─────────────────────────────────────────────────────────────────── */
+
   if (loading) return <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--midnight-green)' }}><h2>Loading Staff Dashboard...</h2></div>;
+
+  /* ── Log-Activities computed ─────────────────────────────────────── */
+  const selectedLogCamera = logCameras.find((c) => String(c.id) === String(selectedLogCameraId));
+  const selectedCameraSourceType = getCameraSourceType(selectedLogCamera?.source);
+  const detectionModeLabel = cameraDetectionPayload?.using_machine7_models ? 'True Machine7 detection' : 'Compatibility detection';
+  const detectionModeColor = cameraDetectionPayload?.using_machine7_models ? '#0F766E' : '#B45309';
+  const isTrueDetectionRunning = Boolean(cameraDetectionPayload?.true_detection_running);
+  /* ─────────────────────────────────────────────────────────────────── */
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--alice-blue)' }}>
@@ -253,7 +543,6 @@ function StaffDashboard({ token, onLogout, role }) {
         </div>
         <nav style={{ flex: 1, padding: '1rem' }}>
           <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', listStyle: 'none', padding: 0 }}>
-            <li><button type="button" onClick={() => setStaffSection('residents')} style={navBtn(staffSection === 'residents')} {...sidebarBtnHoverHandlers}><Users size={18} /> Assigned Residents</button></li>
             <li><button type="button" onClick={() => setStaffSection('residents-db')} style={navBtn(staffSection === 'residents-db')} {...sidebarBtnHoverHandlers}><Users size={18} /> Residents Information</button></li>
             <li><button type="button" onClick={() => setStaffSection('diabetes')} style={navBtn(staffSection === 'diabetes')} {...sidebarBtnHoverHandlers}><Activity size={18} /> Glucose Monitoring</button></li>
             <li><button type="button" onClick={() => setStaffSection('incidents')} style={navBtn(staffSection === 'incidents')} {...sidebarBtnHoverHandlers}><ShieldAlert size={18} /> Facility Incidents</button></li>
@@ -263,6 +552,7 @@ function StaffDashboard({ token, onLogout, role }) {
             <li><button type="button" onClick={() => setStaffSection('combi')} style={navBtn(staffSection === 'combi')} {...sidebarBtnHoverHandlers}><Brain size={18} /> Social Interaction</button></li>
             <li><button type="button" onClick={() => setStaffSection('wandering')} style={navBtn(staffSection === 'wandering')} {...sidebarBtnHoverHandlers}><Sparkles size={18} /> Wandering Detection</button></li>
             <li><button type="button" onClick={() => setStaffSection('medication')} style={navBtn(staffSection === 'medication')}><Pill size={18} /> Medication Risk</button></li>
+            <li><button type="button" onClick={() => setStaffSection('logActivities')} style={navBtn(staffSection === 'logActivities')} {...sidebarBtnHoverHandlers}><Camera size={18} /> Log Activities</button></li>
             {role === 'ADMIN' && (
               <li>
                 <button type="button" onClick={() => setStaffSection('manageShifts')} style={navBtn(staffSection === 'manageShifts')}>
@@ -335,7 +625,272 @@ function StaffDashboard({ token, onLogout, role }) {
             </header>
             <ShiftManagement />
           </div>
-        ):staffSection === 'wandering' ? (
+        ) : staffSection === 'logActivities' ? (
+          <div style={{ padding: '0' }}>
+            {/* Header */}
+            <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+              <div>
+                <h1 style={{ color: 'var(--midnight-green)', margin: 0 }}>Log Activities</h1>
+                <p style={{ color: 'var(--text-light)', margin: 0 }}>Camera-based detection and activity summaries</p>
+              </div>
+            </header>
+
+            {/* Sub-tab bar */}
+            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+              {[
+                { key: 'camera', icon: <Camera size={16} />, label: 'Camera Detection' },
+                { key: 'summary', icon: <FileText size={16} />, label: 'Summary Generation' },
+              ].map(({ key, icon, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setLogActivitiesTab(key)}
+                  style={logTabBtnStyle(logActivitiesTab === key)}
+                >
+                  {icon} {label}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Camera Detection tab ─────────────────────────────────── */}
+            {logActivitiesTab === 'camera' && (
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                {/* Error banners */}
+                {runModelsError && (
+                  <div style={logAlertStyle('error')}>{runModelsError}</div>
+                )}
+                {cameraDetectionError && (
+                  <div style={logAlertStyle('error')}>{cameraDetectionError}</div>
+                )}
+                {localCameraError && (
+                  <div style={logAlertStyle('error')}>{localCameraError}</div>
+                )}
+                {runModelsMessage && (
+                  <div style={logAlertStyle('success')}>{runModelsMessage}</div>
+                )}
+
+                {/* Live camera screen */}
+                <div style={{ ...sectionCardStyle }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                    <h3 style={{ color: 'var(--midnight-green)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Camera size={18} /> Live Camera Screen
+                    </h3>
+                    <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <select
+                        style={{ border: '1px solid #D7E3EA', borderRadius: '8px', padding: '8px 12px', fontSize: '0.9rem', color: 'var(--midnight-green)', backgroundColor: '#F9FCFE', minWidth: '200px' }}
+                        value={selectedLocalCameraId}
+                        onChange={(e) => setSelectedLocalCameraId(e.target.value)}
+                        disabled={!localCameras.length}
+                      >
+                        {!localCameras.length && <option value="">No PC camera available</option>}
+                        {localCameras.map((cam) => (
+                          <option key={cam.id} value={cam.id}>{cam.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ ...logInsetPanelStyle, marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem', flex: 1 }}>
+                      <div>
+                        <p style={{ margin: '0 0 0.2rem', color: 'var(--text-light)', fontSize: '0.82rem' }}>Location</p>
+                        <p style={{ margin: 0, color: 'var(--midnight-green)', fontWeight: 'bold', fontSize: '0.95rem' }}>
+                          {selectedLogCamera?.location || (localCameras.length ? 'PC Camera' : 'No camera selected')}
+                        </p>
+                      </div>
+                      <div>
+                        <p style={{ margin: '0 0 0.2rem', color: 'var(--text-light)', fontSize: '0.82rem' }}>PC Cameras</p>
+                        <p style={{ margin: 0, color: 'var(--midnight-green)', fontWeight: 'bold', fontSize: '0.95rem' }}>
+                          {localCameras.length ? `${localCameras.length} device(s) detected` : 'None detected'}
+                        </p>
+                      </div>
+                      <div>
+                        <p style={{ margin: '0 0 0.2rem', color: 'var(--text-light)', fontSize: '0.82rem' }}>Detection mode</p>
+                        <p style={{ margin: 0, fontWeight: 'bold', fontSize: '0.95rem', color: detectionModeColor }}>{detectionModeLabel}</p>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={handleStartCameraAndModels}
+                        disabled={busyStartingModels || busyStoppingModels}
+                        style={{ border: 'none', borderRadius: '12px', padding: '0.8rem 1.5rem', fontWeight: 'bold', fontSize: '0.95rem', cursor: (busyStartingModels || busyStoppingModels) ? 'not-allowed' : 'pointer', backgroundColor: 'var(--moonstone)', color: 'white', opacity: (busyStartingModels || busyStoppingModels) ? 0.5 : 1, whiteSpace: 'nowrap' }}
+                      >
+                        {busyStartingModels ? '⏳ Starting...' : '▶ Start Models'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleStopModels}
+                        disabled={busyStoppingModels}
+                        style={{ border: 'none', borderRadius: '12px', padding: '0.8rem 1.25rem', fontWeight: 'bold', fontSize: '0.95rem', cursor: busyStoppingModels ? 'not-allowed' : 'pointer', backgroundColor: '#C2410C', color: 'white', opacity: busyStoppingModels ? 0.55 : 1, whiteSpace: 'nowrap' }}
+                      >
+                        {busyStoppingModels ? '⏳ Stopping...' : '■ Stop + Get Summary'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Live preview */}
+                  {!localCameras.length ? (
+                    <EmptyLogPanel title="No camera selected" message="Connect a PC camera to start detection models." />
+                  ) : (
+                    <div style={{ display: 'grid', gap: '1rem' }}>
+                      <div style={{ width: '100%', minHeight: '260px', borderRadius: '14px', backgroundColor: '#F9FCFE', color: 'var(--midnight-green)', padding: '1rem', display: 'grid', placeItems: 'center', border: '1px solid #D7E3EA' }}>
+                        <div style={{ textAlign: 'center', width: '100%' }}>
+                          <p style={{ margin: 0, fontWeight: 'bold', color: 'var(--midnight-green)' }}>
+                            {localCameras.find((c) => c.id === selectedLocalCameraId)?.label || 'PC Camera'}
+                          </p>
+                          <p style={{ margin: '0.45rem 0 1rem', fontSize: '0.88rem', color: 'var(--text-light)' }}>
+                            Pipeline video mirrored from Python window
+                          </p>
+                          <div style={{ display: 'grid', gap: '0.75rem', maxWidth: '720px', margin: '0 auto' }}>
+                            <div style={{ width: '100%', aspectRatio: '16 / 9', borderRadius: '12px', overflow: 'hidden', border: '1px solid #D7E3EA', backgroundColor: '#EAF3F7' }}>
+                              {livePreviewUrl ? (
+                                <img src={livePreviewUrl} alt="Live pipeline preview" style={{ width: '100%', height: '100%', objectFit: 'cover', backgroundColor: '#EAF3F7' }} />
+                              ) : (
+                                <div style={{ width: '100%', height: '100%', backgroundColor: '#EAF3F7' }} />
+                              )}
+                            </div>
+                            <p style={{ margin: 0, color: 'var(--text-light)', fontSize: '0.85rem' }}>Model output window stays on PC; this page mirrors the same frames.</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.9rem' }}>
+                        <div style={logInfoTileStyle}>
+                          <p style={{ margin: 0, color: 'var(--text-light)', fontSize: '0.85rem' }}>Detection status</p>
+                          <p style={{ margin: '0.25rem 0 0', color: isTrueDetectionRunning ? '#0F766E' : '#B45309', fontWeight: 'bold' }}>
+                            {isTrueDetectionRunning ? 'Active' : 'Not active yet'}
+                          </p>
+                        </div>
+                        <div style={logInfoTileStyle}>
+                          <p style={{ margin: 0, color: 'var(--text-light)', fontSize: '0.85rem' }}>Resident detections</p>
+                          <p style={{ margin: '0.25rem 0 0', color: 'var(--midnight-green)', fontWeight: 'bold' }}>{cameraDetectionPayload?.resident_detections?.length || 0}</p>
+                        </div>
+                        <div style={logInfoTileStyle}>
+                          <p style={{ margin: 0, color: 'var(--text-light)', fontSize: '0.85rem' }}>Recent events</p>
+                          <p style={{ margin: '0.25rem 0 0', color: 'var(--midnight-green)', fontWeight: 'bold' }}>{cameraDetectionPayload?.recent_camera_events?.length || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Live detection info */}
+                <div style={{ ...sectionCardStyle }}>
+                  <h3 style={{ color: 'var(--midnight-green)', marginTop: 0, marginBottom: '0.8rem' }}>Live Detection Info</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <p style={{ margin: '0 0 0.6rem', color: 'var(--midnight-green)', fontWeight: 'bold', fontSize: '0.9rem' }}>Resident Detections</p>
+                      {cameraDetectionPayload?.resident_detections?.length ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '320px', overflowY: 'auto' }}>
+                          {cameraDetectionPayload.resident_detections.map((d) => (
+                            <div key={`${d.person_id}-${d.last_seen}`} style={{ ...logInfoTileStyle, backgroundColor: '#F9FCFE' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'flex-start' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                  {d.resident_photo_url ? (
+                                    <img src={d.resident_photo_url} alt={d.name} style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--moonstone)', flexShrink: 0 }} />
+                                  ) : (
+                                    <div style={{ width: 38, height: 38, borderRadius: '50%', backgroundColor: 'var(--moonstone)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: '0.9rem', flexShrink: 0 }}>
+                                      {(d.name || '?')[0].toUpperCase()}
+                                    </div>
+                                  )}
+                                  <p style={{ margin: '0 0 0.25rem', fontWeight: 'bold', color: 'var(--midnight-green)' }}>{d.name}</p>
+                                </div>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', padding: '4px 8px', borderRadius: '999px', backgroundColor: d.detection_source === 'machine7' ? '#DCFCE7' : '#FEF3C7', color: d.detection_source === 'machine7' ? '#166534' : '#92400E' }}>
+                                  {d.detection_source === 'machine7' ? 'True detection' : 'Compatibility'}
+                                </span>
+                              </div>
+                              <p style={{ margin: '0 0 0.2rem', color: 'var(--text-dark)', fontSize: '0.9rem' }}>Detected at: {d.detected_location || d.camera_location || d.area || 'Unknown'}</p>
+                              <p style={{ margin: '0 0 0.2rem', color: 'var(--text-dark)', fontSize: '0.9rem' }}>Activity: {d.activity}</p>
+                              <p style={{ margin: 0, color: 'var(--text-light)', fontSize: '0.85rem' }}>Last seen: {formatTimestamp(d.last_seen)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <EmptyLogPanel title="No detections yet" message="Pipeline active — no resident detected yet." />
+                      )}
+                    </div>
+                    <div>
+                      <p style={{ margin: '0 0 0.6rem', color: 'var(--midnight-green)', fontWeight: 'bold', fontSize: '0.9rem' }}>Recent Camera Events</p>
+                      {cameraDetectionPayload?.recent_camera_events?.length ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '320px', overflowY: 'auto' }}>
+                          {cameraDetectionPayload.recent_camera_events.map((ev, idx) => (
+                            <div key={`${ev.created_at || idx}-${idx}`} style={{ padding: '0.9rem', borderLeft: '4px solid var(--moonstone)', backgroundColor: '#F9FCFE', borderRadius: '0 12px 12px 0', borderTop: '1px solid #D7E3EA', borderRight: '1px solid #D7E3EA', borderBottom: '1px solid #D7E3EA' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
+                                {ev.resident_photo_url ? (
+                                  <img src={ev.resident_photo_url} alt={ev.resident} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--moonstone)', flexShrink: 0 }} />
+                                ) : (
+                                  <div style={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: 'var(--moonstone)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: '0.85rem', flexShrink: 0 }}>
+                                    {(ev.resident || '?')[0].toUpperCase()}
+                                  </div>
+                                )}
+                                <p style={{ margin: 0, fontWeight: 'bold', color: 'var(--midnight-green)' }}>{ev.resident}</p>
+                              </div>
+                              <p style={{ margin: '0 0 0.2rem', color: 'var(--text-dark)', fontSize: '0.9rem' }}>{ev.summary_text || 'No summary text.'}</p>
+                              <p style={{ margin: 0, color: 'var(--text-light)', fontSize: '0.85rem' }}>{ev.location} | {formatTimestamp(ev.created_at)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <EmptyLogPanel title="No camera events yet" message="Events will appear here while monitoring is running." />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Summary Generation tab ────────────────────────────────── */}
+            {logActivitiesTab === 'summary' && (
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                <div style={{ ...sectionCardStyle }}>
+                  <h3 style={{ color: 'var(--midnight-green)', margin: 0 }}>Generated Summaries</h3>
+                  <p style={{ color: 'var(--text-light)', margin: '0.25rem 0 0' }}>Review generated summaries from monitoring sessions.</p>
+                </div>
+
+                {generateMessage && (
+                  <div style={logAlertStyle('success')}>{generateMessage}</div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div style={{ ...sectionCardStyle }}>
+                    <h3 style={{ color: 'var(--midnight-green)', marginTop: 0, marginBottom: '0.8rem' }}>Summary Snapshots</h3>
+                    {pipelineSummary.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '500px', overflowY: 'auto' }}>
+                        {pipelineSummary.map((item) => (
+                          <div key={item.person_id} style={{ ...logInfoTileStyle, backgroundColor: '#F9FCFE' }}>
+                            <strong style={{ color: 'var(--midnight-green)' }}>{item.name}</strong>
+                            <p style={{ margin: '0.35rem 0', color: 'var(--text-dark)' }}>{item.summary_line}</p>
+                            <p style={{ margin: 0, color: 'var(--text-light)', fontSize: '0.85rem' }}>Top area: {item.top_area || 'N/A'}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <EmptyLogPanel title="No monitoring summaries" message="Start and stop detection to populate this page with summaries." />
+                    )}
+                  </div>
+
+                  <div style={{ ...sectionCardStyle }}>
+                    <h3 style={{ color: 'var(--midnight-green)', marginTop: 0, marginBottom: '0.8rem' }}>All Generated History</h3>
+                    {pipelineHistory.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '500px', overflowY: 'auto' }}>
+                        {pipelineHistory.map((entry) => (
+                          <div key={entry.id} style={{ padding: '1rem', borderLeft: '4px solid var(--moonstone)', backgroundColor: '#F9FCFE', borderRadius: '0 10px 10px 0', borderTop: '1px solid #D7E3EA', borderRight: '1px solid #D7E3EA', borderBottom: '1px solid #D7E3EA' }}>
+                            <p style={{ margin: '0 0 0.35rem', fontWeight: 'bold', color: 'var(--midnight-green)' }}>{entry.name}</p>
+                            <p style={{ margin: '0 0 0.25rem', color: 'var(--text-dark)' }}>{formatHistoryEntry(entry)}</p>
+                            <p style={{ margin: 0, color: 'var(--text-light)', fontSize: '0.85rem' }}>Top area: {entry.location} | {formatTimestamp(entry.created_at)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <EmptyLogPanel title="No generated history" message="Generated summaries will appear here after monitoring activity." />
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : staffSection === 'wandering' ? (
           <div style={{ margin: '-3rem' }}>
             <WanderingDetection token={token} onLogout={onLogout} />
           </div>
@@ -350,8 +905,9 @@ function StaffDashboard({ token, onLogout, role }) {
                   {staffSection === 'livefeed' ? 'Monitor live aggression detection feeds' :
                     staffSection === 'gait' ? 'Review gait-analysis results and launch new recordings' :
                     staffSection === 'wandering' ? 'Review wandering risk scores, trajectories, and generated reports' :
+                    staffSection === 'residents-db' ? 'Manage resident records, photos, and face-recognition data' :
                     staffSection === 'incidents' ? 'View all facility incidents and history' :
-                      'Monitor all assigned residents for your shift'}
+                      'Review resident monitoring tools for your shift'}
                 </p>
               </div>
               <NotificationBell token={token} compact dropdownAlign="top-right" />
@@ -474,73 +1030,11 @@ function StaffDashboard({ token, onLogout, role }) {
                   <p style={{ color: 'var(--text-light)', margin: 0 }}>No facility incidents yet.</p>
                 )}
               </div>
-            ) : errorMsg ? (
-              <div style={{ ...sectionCardStyle, textAlign: 'center', padding: '3rem' }}>
-                <AlertCircle size={48} color="var(--cadet-gray)" style={{ marginBottom: '1rem' }} />
-                <h2 style={{ color: 'var(--midnight-green)', marginBottom: '1rem' }}>Dashboard Unavailable</h2>
-                <p style={{ color: 'var(--text-light)', fontSize: '1.1rem' }}>{errorMsg}</p>
-              </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '2rem' }}>
-                {residents && residents.map((resident) => (
-                  <div key={resident.id} style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: 'var(--border-radius)', boxShadow: 'var(--box-shadow)', borderTop: `4px solid ${resident.risk_level === 'HIGH' ? '#EF4444' : resident.risk_level === 'MEDIUM' ? '#F59E0B' : 'var(--moonstone)'}` }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                      <div>
-                        <h3 style={{ margin: 0, color: 'var(--midnight-green)' }}>{resident.name}</h3>
-                        <p style={{ margin: 0, color: 'var(--text-light)', fontSize: '0.9rem' }}>Room: {resident.room_number} | Age: {resident.age}</p>
-                      </div>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 'bold', padding: '4px 8px', borderRadius: '12px', backgroundColor: resident.risk_level === 'HIGH' ? '#FEE2E2' : resident.risk_level === 'MEDIUM' ? '#FEF3C7' : '#E0F2FE', color: resident.risk_level === 'HIGH' ? '#B91C1C' : resident.risk_level === 'MEDIUM' ? '#B45309' : '#0369A1' }}>
-                        {resident.risk_level} RISK
-                      </span>
-                    </div>
-
-                    <div style={{ padding: '1rem', backgroundColor: 'var(--alice-blue)', borderRadius: 'var(--border-radius-sm)', marginBottom: '1rem' }}>
-                      <p style={{ margin: 0, fontWeight: 'bold', color: 'var(--midnight-green)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <HeartPulse size={16} color="var(--moonstone)" /> Recent Metrics
-                      </p>
-                      <ul style={{ listStyle: 'none', padding: 0, margin: '0.5rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-dark)' }}>
-                        {resident.metrics && resident.metrics.length > 0 ? resident.metrics.slice(0, 3).map((m, idx) => (
-                          <li key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-                            <span>{m.metric_type_display}</span>
-                            <span style={{ fontWeight: 'bold' }}>{m.value}</span>
-                          </li>
-                        )) : <li>No recent metrics.</li>}
-                      </ul>
-                    </div>
-
-                    <div>
-                      <p style={{ margin: 0, fontWeight: 'bold', color: '#EF4444', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <AlertCircle size={16} /> Recent Incidents
-                      </p>
-                      <ul style={{ listStyle: 'none', padding: 0, margin: '0.5rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-dark)' }}>
-                        {resident.incidents && resident.incidents.length > 0 ? resident.incidents.slice(0, 2).map((inc, idx) => {
-                          const c = getIncidentColor(inc.type);
-                          return (
-                            <li key={idx} style={{ padding: '0.5rem', backgroundColor: c.bg, borderLeft: `3px solid ${c.border}`, borderRadius: '4px', marginBottom: '0.3rem' }}>
-                              <strong style={{ color: c.text }}>{inc.type_display}</strong> in {inc.zone?.name || 'Unknown'}
-                            </li>
-                          );
-                        }) : <li style={{ color: 'var(--text-light)' }}>No recent incidents.</li>}
-                      </ul>
-                    </div>
-                    {/* Medications */}
-                    {resident.medications && resident.medications.length > 0 && (
-                      <div style={{ marginTop: '1rem' }}>
-                        <p style={{ margin: 0, fontWeight: 'bold', color: 'var(--midnight-green)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          💊 Medications
-                        </p>
-                        <ul style={{ listStyle: 'none', padding: 0, margin: '0.5rem 0 0 0', fontSize: '0.85rem' }}>
-                          {resident.medications.map((med, idx) => (
-                            <li key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem', padding: '0.4rem 0.6rem', backgroundColor: 'var(--alice-blue)', borderRadius: '6px' }}>
-                              <span>{med.name} {med.dosage} — {med.scheduled_time}</span>
-                              <span>{med.last_status === 'taken' ? '✅' : med.last_status === 'missed' ? '❌' : med.last_status === 'refused' ? '🚫' : '—'}</span>
-                            </li>
-                          ))}
-                        </ul>
-                        </div>
-                    )}
-                  </div>
-                ))}
+              <div style={{ ...sectionCardStyle, textAlign: 'center', padding: '3rem' }}>
+                <Users size={42} color="var(--moonstone)" style={{ marginBottom: '1rem' }} />
+                <h2 style={{ color: 'var(--midnight-green)', marginBottom: '0.75rem' }}>Section removed</h2>
+                <p style={{ color: 'var(--text-light)', fontSize: '1rem', margin: 0 }}>The old Assigned Residents page has been removed from this dashboard.</p>
               </div>
             )}
           </div>
@@ -688,7 +1182,17 @@ function FamilyDashboard({ token, onLogout }) {
                           const c = getIncidentColor(incident.type);
                           return (
                             <div key={idx} style={{ padding: '1rem', borderLeft: `4px solid ${c.border}`, backgroundColor: c.bg, borderRadius: '0 var(--border-radius-sm) var(--border-radius-sm) 0' }}>
-                              <p style={{ margin: '0 0 0.5rem 0', fontWeight: 'bold', color: c.text }}>{incident.type_display} detected</p>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                                {incident.resident_photo_url ? (
+                                  <img src={incident.resident_photo_url} alt={incident.resident_name || 'Resident'} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', border: `2px solid ${c.border}`, flexShrink: 0 }} />
+                                ) : (
+                                  <div style={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: c.border, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: '0.85rem', flexShrink: 0 }}>
+                                    {(incident.resident_name || '?')[0].toUpperCase()}
+                                  </div>
+                                )}
+                                <p style={{ margin: 0, fontWeight: 'bold', color: c.text }}>{incident.type_display} detected</p>
+                              </div>
+                              {incident.resident_name && <p style={{ margin: '0 0 0.25rem', fontSize: '0.85rem', color: c.text, fontWeight: 600 }}>Resident: {incident.resident_name}</p>}
                               <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-light)' }}>Zone: {incident.zone?.name || 'Unknown'}</p>
                               <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-light)' }}>{new Date(incident.timestamp).toLocaleString()}</p>
                             </div>
@@ -724,8 +1228,20 @@ function FamilyDashboard({ token, onLogout }) {
                     const c = getIncidentColor(incident.type);
                     return (
                       <div key={idx} style={{ padding: '1.5rem', borderLeft: `4px solid ${c.border}`, backgroundColor: 'white', borderRadius: '0 var(--border-radius-sm) var(--border-radius-sm) 0', boxShadow: 'var(--box-shadow)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', gap: '1rem' }}>
-                          <strong style={{ color: c.text }}>{incident.type_display}</strong>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem', gap: '1rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            {incident.resident_photo_url ? (
+                              <img src={incident.resident_photo_url} alt={incident.resident_name || 'Resident'} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', border: `2px solid ${c.border}`, flexShrink: 0 }} />
+                            ) : (
+                              <div style={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: c.badge, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: '1rem', flexShrink: 0 }}>
+                                {(incident.resident_name || '?')[0].toUpperCase()}
+                              </div>
+                            )}
+                            <div>
+                              <strong style={{ color: c.text }}>{incident.type_display}</strong>
+                              {incident.resident_name && <p style={{ margin: '0.1rem 0 0', fontSize: '0.85rem', color: 'var(--text-dark)', fontWeight: 600 }}>{incident.resident_name}</p>}
+                            </div>
+                          </div>
                           <span style={{ fontSize: '0.8rem', color: 'var(--text-light)', whiteSpace: 'nowrap' }}>{new Date(incident.timestamp).toLocaleString()}</span>
                         </div>
                         <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-dark)' }}>{incident.description || 'No description provided.'}</p>

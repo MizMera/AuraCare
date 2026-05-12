@@ -585,3 +585,40 @@ class GlucoseReading(models.Model):
     def __str__(self):
         return f"{self.resident.name} — {self.blood_glucose} mg/dL ({self.get_glucose_class_display()})"
 
+# ---------------------------------------------------------------------------
+# Models integrated from monitoring pipeline project
+# ---------------------------------------------------------------------------
+
+class ResidentEnrollmentImage(models.Model):
+    resident = models.ForeignKey(Resident, on_delete=models.CASCADE, related_name='enrollment_images')
+    image = models.ImageField(upload_to='resident-enrollments/')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Enrollment image for {self.resident.name}"
+
+
+class DailySummary(models.Model):
+    resident = models.ForeignKey(Resident, on_delete=models.CASCADE, related_name='daily_summaries')
+    zone = models.ForeignKey(Zone, on_delete=models.CASCADE, related_name='daily_summaries')
+    device = models.ForeignKey(Device, on_delete=models.SET_NULL, null=True, blank=True, related_name='daily_summaries')
+    date = models.DateField()
+    location = models.CharField(max_length=255, blank=True)
+    summary_text = models.TextField(blank=True)
+    start_datetime = models.DateTimeField(null=True, blank=True)
+    end_datetime = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date', '-created_at']
+
+    def __str__(self):
+        return f"{self.resident.name} summary on {self.date.isoformat()}"
+
+    def save(self, *args, **kwargs):
+        if not self.location:
+            self.location = self.zone.name
+        super().save(*args, **kwargs)
