@@ -1,0 +1,2 @@
+track_id,duration_s,num_points,tortuosity,turn_rate_per_min,revisit_ratio,mean_speed_px_per_s,idle_ratio,heuristic_risk,ml_risk,ml_confidence,final_risk
+1,7.400000095367432,216,14.118122983404422,972.9729604337929,0.8194444444444444,374.2545166015625,0.004651162790697674,high,high,0.97,high

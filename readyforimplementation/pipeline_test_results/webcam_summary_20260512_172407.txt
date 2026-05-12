@@ -1,0 +1,15 @@
+======================================================================
+WEBCAM TRACKING & RISK ANALYSIS - RESULTS
+======================================================================
+Timestamp: 2026-05-12T17:24:07.072036
+Model: unified_pipeline.pt
+
+SUMMARY:
+  Total Tracks: 1
+  High Risk:    1 (100.0%)
+  Medium Risk:  0 (0.0%)
+  Low Risk:     0 (0.0%)
+
+DETAILED RESULTS:
+   track_id  duration_s  num_points  tortuosity  turn_rate_per_min  revisit_ratio  mean_speed_px_per_s  idle_ratio heuristic_risk ml_risk  ml_confidence final_risk
+0         1         7.4         216   14.118123          972.97296       0.819444           374.254517    0.004651           high    high           0.97       high

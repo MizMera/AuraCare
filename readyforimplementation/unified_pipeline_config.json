@@ -1,0 +1,30 @@
+{
+  "model_type": "UnifiedPipeline",
+  "version": "1.0",
+  "components": {
+    "trajectory_analyzer": {
+      "features": [
+        "tortuosity",
+        "turn_rate_per_min",
+        "revisit_ratio",
+        "duration_s",
+        "speed_std_px_per_s",
+        "mean_speed_px_per_s",
+        "idle_ratio",
+        "max_speed_px_per_s"
+      ]
+    },
+    "heuristic_scorer": {
+      "rules": "tortuosity, turn_rate, revisit_ratio, idle_ratio"
+    },
+    "ml_predictor": {
+      "model": "RandomForestClassifier",
+      "classes": [
+        "low_risk",
+        "high_risk"
+      ]
+    }
+  },
+  "model_path": "E:\\dirra\\projetpi\\ml_models\\unified_pipeline.pt",
+  "feature_extraction_fps": 30
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "track_id": 1,
+    "num_points": 216,
+    "duration_s": 7.400000095367432,
+    "features": {
+      "tortuosity": 14.118122983404422,
+      "turn_rate_per_min": 972.9729604337929,
+      "revisit_ratio": 0.8194444444444444,
+      "duration_s": 7.400000095367432,
+      "speed_std_px_per_s": 414.6342468261719,
+      "mean_speed_px_per_s": 374.2545166015625,
+      "idle_ratio": 0.004651162790697674,
+      "max_speed_px_per_s": 2310.617431640625
+    },
+    "heuristic_risk": "high",
+    "ml_risk": "high",
+    "ml_confidence": 0.97,
+    "ensemble_agreement": true,
+    "final_risk": "high"
+  }
+]
