@@ -7,10 +7,7 @@ Fonctionnalités :
      retourne les résidents reconnus avec leur score de confiance.
 
 Dépendances Python :
-    pip install insightface onnxruntime pillow numpy opencv-python-headless
-
-insightface utilise ONNX Runtime (pas besoin de dlib ni de GPU).
-Le modèle buffalo_l sera téléchargé automatiquement au premier lancement (~300 MB).
+    pip install dlib-bin face-recognition face-recognition-models pillow numpy opencv-python
 """
 
 import base64
@@ -32,94 +29,69 @@ from .models import Resident, FaceEncoding
 
 logger = logging.getLogger(__name__)
 
-# ── Seuil de similarité cosinus (0.0 = différent, 1.0 = identique) ──
-# Équivalent à une tolérance de 0.52 dans face_recognition
-FACE_SIMILARITY_THRESHOLD = 0.40
+# ── Seuil de similarité (distance euclidienne, plus faible = plus similaire) ──
+# face_recognition utilise la distance euclidienne
+# 0.6 est la valeur par défaut, nous utilisons 0.5 pour être plus strict
+FACE_SIMILARITY_THRESHOLD = 0.2
 
 
 # ──────────────────────────────────────────────────────────────
-# Initialisation d'InsightFace (singleton)
+# Fonctions utilitaires avec face_recognition
 # ──────────────────────────────────────────────────────────────
-
-_insightface_app = None
-
-def _get_insightface_app():
-    """
-    Retourne l'instance InsightFace (initialisée une seule fois).
-    ctx_id=-1 → CPU uniquement (pas besoin de GPU).
-    """
-    global _insightface_app
-    if _insightface_app is None:
-        try:
-            from insightface.app import FaceAnalysis
-            _insightface_app = FaceAnalysis(
-                name='buffalo_l',
-                providers=['CPUExecutionProvider']
-            )
-            _insightface_app.prepare(ctx_id=-1, det_size=(640, 640))
-            logger.info("InsightFace initialisé avec succès.")
-        except Exception as e:
-            logger.error(f"Impossible d'initialiser InsightFace : {e}")
-            return None
-    return _insightface_app
-
-
-# ──────────────────────────────────────────────────────────────
-# Fonctions utilitaires
-# ──────────────────────────────────────────────────────────────
-
-def _pil_to_bgr(pil_image):
-    """Convertit une image PIL RGB en tableau numpy BGR (pour OpenCV/InsightFace)."""
-    img_rgb = np.array(pil_image.convert("RGB"))
-    return cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
-
 
 def _compute_encoding(image_bytes: bytes):
     """
-    Calcule l'encodage facial 512-dim depuis les bytes d'une image.
+    Calcule l'encodage facial avec face_recognition.
     Retourne (encoding_array, error_str).
     """
-    face_app = _get_insightface_app()
-    if face_app is None:
-        return None, "insightface non disponible sur le serveur"
-
     try:
+        import face_recognition
         from PIL import Image
+        
+        # Lire l'image
         img_pil = Image.open(io.BytesIO(image_bytes))
-        img_bgr = _pil_to_bgr(img_pil)
+        img_rgb = np.array(img_pil.convert("RGB"))
+        
+        # Détecter les visages
+        face_locations = face_recognition.face_locations(img_rgb)
+        
+        if not face_locations:
+            return None, "Aucun visage détecté dans l'image"
+        if len(face_locations) > 1:
+            return None, f"{len(face_locations)} visages détectés — utilisez une photo avec un seul visage"
+        
+        # Obtenir l'encodage
+        face_encodings = face_recognition.face_encodings(img_rgb, face_locations)
+        
+        if not face_encodings:
+            return None, "Impossible d'encoder le visage"
+        
+        return face_encodings[0], None
+        
     except Exception as e:
-        return None, f"Impossible de lire l'image : {e}"
-
-    faces = face_app.get(img_bgr)
-
-    if not faces:
-        return None, "Aucun visage détecté dans l'image"
-    if len(faces) > 1:
-        return None, f"{len(faces)} visages détectés — utilisez une photo avec un seul visage"
-
-    return faces[0].embedding, None
+        return None, f"Erreur lors du traitement: {e}"
 
 
-def _cosine_similarity(enc1: np.ndarray, enc2: np.ndarray) -> float:
-    """Similarité cosinus entre deux vecteurs (résultat entre -1 et 1)."""
-    norm1 = np.linalg.norm(enc1)
-    norm2 = np.linalg.norm(enc2)
-    if norm1 == 0 or norm2 == 0:
-        return 0.0
-    return float(np.dot(enc1, enc2) / (norm1 * norm2))
-
-
-def _cosine_similarities(known_encodings: list, unknown_encoding: np.ndarray) -> np.ndarray:
-    """Calcule la similarité cosinus entre un encodage inconnu et tous les encodages connus."""
+def _compare_encodings(known_encodings: list, unknown_encoding: np.ndarray) -> tuple:
+    """
+    Compare un encodage inconnu avec une liste d'encodages connus.
+    Retourne (meilleur_score, meilleur_index) où score est la similarité (0-1).
+    """
+    import face_recognition
+    
     if not known_encodings:
-        return np.array([])
-    known_matrix = np.stack(known_encodings)          # (N, 512)
-    norms = np.linalg.norm(known_matrix, axis=1)      # (N,)
-    unknown_norm = np.linalg.norm(unknown_encoding)
-    if unknown_norm == 0:
-        return np.zeros(len(known_encodings))
-    dots = known_matrix @ unknown_encoding             # (N,)
-    return dots / (norms * unknown_norm)
+        return 0.0, -1
+    
+    # Calculer les distances euclidiennes
+    distances = face_recognition.face_distance(known_encodings, unknown_encoding)
+    best_idx = int(np.argmin(distances))
+    best_distance = float(distances[best_idx])
+    
+    # Convertir la distance en similarité (plus proche de 1 = meilleur)
+    # distance 0 = identique, distance 0.6 = différent
+    similarity = max(0.0, 1.0 - (best_distance / 0.6))
+    
+    return similarity, best_idx
 
 
 def _get_all_known_encodings():
@@ -247,40 +219,13 @@ class FaceIdentifyView(views.APIView):
 
     Retourne la liste des visages détectés et, pour chacun, le résident identifié
     (ou null si inconnu).
-
-    Réponse :
-      {
-        "faces": [
-          {
-            "location": {"top": .., "right": .., "bottom": .., "left": ..},
-            "resident_id": 3,
-            "resident_name": "Jean Dupont",
-            "confidence": 87.4,
-            "photo_url": "http://..."
-          },
-          {
-            "location": {...},
-            "resident_id": null,
-            "resident_name": "Inconnu",
-            "confidence": null,
-            "photo_url": null
-          }
-        ],
-        "total_faces": 2,
-        "identified": 1
-      }
     """
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser]
 
     def post(self, request, *args, **kwargs):
-        face_app = _get_insightface_app()
-        if face_app is None:
-            return Response(
-                {"error": "insightface non disponible sur le serveur"},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-
+        import face_recognition
+        
         frame_b64 = request.data.get('frame_b64')
         if not frame_b64:
             return Response({"error": "Champ 'frame_b64' manquant"}, status=status.HTTP_400_BAD_REQUEST)
@@ -297,13 +242,15 @@ class FaceIdentifyView(views.APIView):
             if img_pil.width > max_w:
                 ratio = max_w / img_pil.width
                 img_pil = img_pil.resize((max_w, int(img_pil.height * ratio)), Image.LANCZOS)
-            img_bgr = _pil_to_bgr(img_pil)
+            img_rgb = np.array(img_pil.convert("RGB"))
         except Exception as e:
             return Response({"error": f"Image invalide : {e}"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Détection + encodage des visages dans la frame
-        faces = face_app.get(img_bgr)
-        if not faces:
+        # Détection des visages dans la frame
+        face_locations = face_recognition.face_locations(img_rgb)
+        face_encodings = face_recognition.face_encodings(img_rgb, face_locations)
+        
+        if not face_encodings:
             return Response({"faces": [], "total_faces": 0, "identified": 0})
 
         # Chargement des encodages connus
@@ -312,10 +259,9 @@ class FaceIdentifyView(views.APIView):
         results = []
         identified_count = 0
 
-        for face in faces:
-            bbox = face.bbox.astype(int)  # [x1, y1, x2, y2]
-            left, top, right, bottom = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
-
+        for i, (location, encoding) in enumerate(zip(face_locations, face_encodings)):
+            top, right, bottom, left = location
+            
             face_data = {
                 "location": {"top": top, "right": right, "bottom": bottom, "left": left},
                 "resident_id": None,
@@ -325,13 +271,11 @@ class FaceIdentifyView(views.APIView):
             }
 
             if known_encodings:
-                similarities = _cosine_similarities(known_encodings, face.embedding)
-                best_idx = int(np.argmax(similarities))
-                best_sim = float(similarities[best_idx])
-
-                if best_sim >= FACE_SIMILARITY_THRESHOLD:
+                similarity, best_idx = _compare_encodings(known_encodings, encoding)
+                
+                if similarity >= FACE_SIMILARITY_THRESHOLD:
                     resident = known_residents[best_idx]
-                    confidence = round(best_sim * 100, 1)
+                    confidence = round(similarity * 100, 1)
                     face_data.update({
                         "resident_id": resident.id,
                         "resident_name": resident.name,

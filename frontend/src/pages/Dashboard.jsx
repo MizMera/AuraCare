@@ -259,7 +259,7 @@ function StaffDashboard({ token, onLogout, role }) {
             <li><button type="button" onClick={() => setStaffSection('incidents')} style={navBtn(staffSection === 'incidents')} {...sidebarBtnHoverHandlers}><ShieldAlert size={18} /> Facility Incidents</button></li>
             <li><button type="button" onClick={() => setStaffSection('meals')} style={navBtn(staffSection === 'meals')} {...sidebarBtnHoverHandlers}><UtensilsCrossed size={18} /> Meals & Alerts</button></li>
             <li><button type="button" onClick={() => setStaffSection('gait')} style={navBtn(staffSection === 'gait')} {...sidebarBtnHoverHandlers}><Activity size={18} /> Gait Analysis</button></li>
-            <li><button type="button" onClick={() => setStaffSection('livefeed')} style={navBtn(staffSection === 'livefeed')} {...sidebarBtnHoverHandlers}><Video size={18} /> Live Feed</button></li>
+            <li><button type="button" onClick={() => setStaffSection('livefeed')} style={navBtn(staffSection === 'livefeed')} {...sidebarBtnHoverHandlers}><Video size={18} /> Live Aggression</button></li>
             <li><button type="button" onClick={() => setStaffSection('combi')} style={navBtn(staffSection === 'combi')} {...sidebarBtnHoverHandlers}><Brain size={18} /> Social Interaction</button></li>
             <li><button type="button" onClick={() => setStaffSection('wandering')} style={navBtn(staffSection === 'wandering')} {...sidebarBtnHoverHandlers}><Sparkles size={18} /> Wandering Detection</button></li>
             <li><button type="button" onClick={() => setStaffSection('medication')} style={navBtn(staffSection === 'medication')}><Pill size={18} /> Medication Risk</button></li>

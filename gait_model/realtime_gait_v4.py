@@ -20,7 +20,7 @@ import django
 import numpy as np
  
 # Django setup so we can query the DB
-sys.path.insert(0, r'C:\Users\yomna\Downloads\AuraCare\main17\AuraCare\backend')
+sys.path.insert(0, r'C:\Users\merya\Desktop\3AI\sem1\pyhton\auracareff\AuraCare\backend')
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
