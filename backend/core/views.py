@@ -39,11 +39,11 @@ from .serializers import (
     CustomTokenObtainPairSerializer
 )
 from .meal_monitor import get_meal_attendance_engine, analyse_meal_frame_bytes
-from .chatbot_rag import answer_from_documents
-from .modelayoub_pipeline import get_artifacts as get_modelayoub_artifacts
-from .modelayoub_pipeline import get_status as get_modelayoub_status
-from .modelayoub_pipeline import launch_pipeline as launch_modelayoub_pipeline
-from .modelayoub_pipeline import stop_pipeline as stop_modelayoub_pipeline
+# from .chatbot_rag import answer_from_documents  # Disabled: heavy dependencies (langchain, scipy, sklearn)
+# from .modelayoub_pipeline import get_artifacts as get_modelayoub_artifacts  # Replaced by wandering_pipeline
+# from .modelayoub_pipeline import get_status as get_modelayoub_status  # Replaced by wandering_pipeline
+# from .modelayoub_pipeline import launch_pipeline as launch_modelayoub_pipeline  # Replaced by wandering_pipeline
+# from .modelayoub_pipeline import stop_pipeline as stop_modelayoub_pipeline  # Replaced by wandering_pipeline
 from .utils import get_current_person_count, create_notifications_for_incident
 from .chatbot_corpus import build_chatbot_documents_for_user
 from .detection import process_frame

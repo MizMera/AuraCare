@@ -599,6 +599,7 @@ function FamilyDashboard({ token, onLogout }) {
           <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', listStyle: 'none', padding: 0 }}>
             <li><button onClick={() => setActivePage('overview')} style={navBtn(activePage === 'overview')} {...sidebarBtnHoverHandlers}><Activity size={18} /> Overview</button></li>
             <li><button onClick={() => setActivePage('incidents')} style={navBtn(activePage === 'incidents')} {...sidebarBtnHoverHandlers}><ShieldAlert size={18} /> Incident Logs</button></li>
+            <li><button onClick={() => setActivePage('wandering')} style={navBtn(activePage === 'wandering')} {...sidebarBtnHoverHandlers}><Eye size={18} /> Wandering Detection</button></li>
           </ul>
         </nav>
         <div style={logoutDockStyle}>
@@ -742,6 +743,10 @@ function FamilyDashboard({ token, onLogout }) {
               </div>
             )}
           </div>
+        )}
+
+        {activePage === 'wandering' && (
+          <WanderingDetection token={token} />
         )}
       </main>
       <ChatbotWidget token={token} />

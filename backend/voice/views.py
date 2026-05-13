@@ -1,5 +1,5 @@
-import whisper
-import torch
+# import whisper  # Disabled: whisper not installed in venv
+# import torch  # Disabled: whisper dependency
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.files.storage import default_storage
@@ -12,7 +12,7 @@ import os
 from .models import ShiftReport
 
 # Charge Whisper avec CPU (pas de FP16)
-model = whisper.load_model("base", device="cpu")
+# model = whisper.load_model("base", device="cpu")  # Disabled: whisper not installed
 def get_shifts(request):
     """Retourne la liste des shifts actifs"""
     if request.method == 'GET':

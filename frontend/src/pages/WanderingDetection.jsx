@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import {
   Activity,
@@ -69,15 +69,10 @@ export default function WanderingDetection({ token, onLogout }) {
   const [artifacts, setArtifacts] = useState(null);
   const [error, setError] = useState('');
   const [activeView, setActiveView] = useState('live');
-  const [cameraRunning, setCameraRunning] = useState(false);
-  const [cameraLoading, setCameraLoading] = useState(false);
-  const [cameraError, setCameraError] = useState('');
   const [uploadFile, setUploadFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadResult, setUploadResult] = useState(null);
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
 
   const authHeaders = { Authorization: `Bearer ${token}` };
 
@@ -85,8 +80,8 @@ export default function WanderingDetection({ token, onLogout }) {
     try {
       setError('');
       const [statusResponse, artifactsResponse] = await Promise.all([
-        axios.get(`${API_BASE}/models/modelayoub/status/`, { headers: authHeaders }),
-        axios.get(`${API_BASE}/models/modelayoub/artifacts/`, { headers: authHeaders }),
+        axios.get(`${API_BASE}/wandering/status/`, { headers: authHeaders }),
+        axios.get(`${API_BASE}/wandering/artifacts/`, { headers: authHeaders }),
       ]);
       setStatus(statusResponse.data || {});
       setArtifacts(artifactsResponse.data || {});
@@ -118,8 +113,8 @@ export default function WanderingDetection({ token, onLogout }) {
     try {
       const payload = inputMode === 'upload'
         ? { input_mode: 'upload', video_input_path: uploadResult?.video_path || null }
-        : { input_mode: 'webcam', webcam_index: 0 };
-      const response = await axios.post(`${API_BASE}/models/modelayoub/launch/`, payload, { headers: authHeaders });
+        : { input_mode: 'webcam', webcam_index: 0, duration_seconds: 20 };
+      const response = await axios.post(`${API_BASE}/wandering/launch/`, payload, { headers: authHeaders });
       setStatus(response.data || {});
       await loadData();
     } catch (requestError) {
@@ -136,7 +131,7 @@ export default function WanderingDetection({ token, onLogout }) {
   const handleStop = async () => {
     setStopping(true);
     try {
-      const response = await axios.post(`${API_BASE}/models/modelayoub/stop/`, {}, { headers: authHeaders });
+      const response = await axios.post(`${API_BASE}/wandering/stop/`, {}, { headers: authHeaders });
       setStatus(response.data || {});
       await loadData();
     } catch (requestError) {
@@ -148,35 +143,6 @@ export default function WanderingDetection({ token, onLogout }) {
     } finally {
       setStopping(false);
     }
-  };
-
-  const startCameraPreview = async () => {
-    setCameraLoading(true);
-    setCameraError('');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      streamRef.current = stream;
-      setCameraRunning(true);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-    } catch (previewError) {
-      setCameraError(previewError?.message || 'Unable to open the webcam preview.');
-    } finally {
-      setCameraLoading(false);
-    }
-  };
-
-  const stopCameraPreview = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    setCameraRunning(false);
   };
 
   const handleUploadLaunch = async () => {
@@ -195,7 +161,7 @@ export default function WanderingDetection({ token, onLogout }) {
     }, 180);
 
     try {
-      const response = await axios.post(`${API_BASE}/models/modelayoub/upload/`, form, {
+      const response = await axios.post(`${API_BASE}/wandering/upload/`, form, {
         headers: { ...authHeaders, 'Content-Type': 'multipart/form-data' },
         timeout: 120000,
       });
@@ -406,54 +372,34 @@ export default function WanderingDetection({ token, onLogout }) {
       {activeView === 'live' ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
           <div style={cardStyle}>
-            <h3 style={sectionTitleStyle}>Live Webcam Preview</h3>
-            <p style={{ margin: '0 0 1rem', color: 'var(--text-light)', fontSize: '0.9rem' }}>Open the camera preview, then launch the wandering pipeline in webcam mode.</p>
-            <div style={{ position: 'relative', borderRadius: '18px', overflow: 'hidden', background: '#0F172A', aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {!cameraRunning ? (
-                <div style={{ textAlign: 'center', color: '#94A3B8' }}>
-                  <Video size={56} style={{ opacity: 0.25, marginBottom: '0.5rem' }} />
-                  <p style={{ margin: 0 }}>Start the webcam preview to see the live view.</p>
-                </div>
-              ) : null}
-              <video ref={videoRef} muted playsInline style={{ display: cameraRunning ? 'block' : 'none', width: '100%', height: '100%', objectFit: 'cover' }} />
-              {cameraRunning ? (
-                <div style={{ position: 'absolute', top: '12px', right: '12px', background: 'rgba(4, 120, 87, 0.9)', color: 'white', padding: '0.35rem 0.7rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 800 }}>
-                  LIVE PREVIEW
-                </div>
-              ) : null}
-            </div>
-            {cameraError ? <p style={{ color: '#B91C1C', margin: '0.75rem 0 0' }}>{cameraError}</p> : null}
-            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap' }}>
-              {!cameraRunning ? (
-                <button type="button" onClick={startCameraPreview} disabled={cameraLoading} style={{ padding: '0.85rem 1rem', borderRadius: '14px', border: 'none', background: 'var(--midnight-green)', color: 'white', fontWeight: 700, cursor: cameraLoading ? 'not-allowed' : 'pointer' }}>
-                  {cameraLoading ? 'Starting...' : 'Start Preview'}
-                </button>
+            <h3 style={sectionTitleStyle}>Detection Console</h3>
+            <p style={{ margin: '0 0 1rem', color: 'var(--text-light)', fontSize: '0.9rem' }}>Live detection output from the pipeline. Launch and stop controls are available only in the top header.</p>
+            <div style={{ borderRadius: '18px', background: '#0F172A', color: '#E2E8F0', padding: '1rem', minHeight: '320px', maxHeight: '420px', overflowY: 'auto', fontFamily: 'Consolas, Menlo, Monaco, monospace', fontSize: '0.82rem', lineHeight: 1.5 }}>
+              {Array.isArray(status?.log_tail) && status.log_tail.length > 0 ? (
+                status.log_tail.map((line, idx) => (
+                  <div key={`${idx}-${line.slice(0, 16)}`} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{line}</div>
+                ))
               ) : (
-                <button type="button" onClick={stopCameraPreview} style={{ padding: '0.85rem 1rem', borderRadius: '14px', border: 'none', background: '#DC2626', color: 'white', fontWeight: 700, cursor: 'pointer' }}>
-                  <StopCircle size={16} /> Stop Preview
-                </button>
+                <div style={{ color: '#94A3B8' }}>No detection output yet. Click Launch Pipeline to start.</div>
               )}
-              <button type="button" onClick={() => handleLaunch('webcam')} disabled={launching || running} style={{ padding: '0.85rem 1rem', borderRadius: '14px', border: 'none', background: 'linear-gradient(135deg, #0F766E, #14B8A6)', color: 'white', fontWeight: 700, cursor: launching || running ? 'not-allowed' : 'pointer', opacity: launching || running ? 0.72 : 1 }}>
-                <Play size={16} /> {launching ? 'Launching...' : 'Launch Pipeline'}
-              </button>
             </div>
           </div>
 
           <div style={cardStyle}>
-            <h3 style={sectionTitleStyle}>Webcam Mode</h3>
-            <p style={{ margin: '0 0 1rem', color: 'var(--text-light)', fontSize: '0.9rem' }}>This mode reads from the live camera and writes the latest wandering metrics to the dashboard.</p>
+            <h3 style={sectionTitleStyle}>Live Run Info</h3>
+            <p style={{ margin: '0 0 1rem', color: 'var(--text-light)', fontSize: '0.9rem' }}>Current execution information for the backend wandering run.</p>
             <div style={{ display: 'grid', gap: '0.85rem' }}>
               <div style={metricStyle}>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-light)', fontWeight: 700 }}>Input</div>
-                <div style={{ fontWeight: 800, color: 'var(--midnight-green)', fontSize: '1.1rem' }}>Webcam 0</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-light)', fontWeight: 700 }}>Mode</div>
+                <div style={{ fontWeight: 800, color: 'var(--midnight-green)', fontSize: '1.1rem' }}>{currentMode}</div>
               </div>
               <div style={metricStyle}>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-light)', fontWeight: 700 }}>Display</div>
-                <div style={{ fontWeight: 800, color: 'var(--midnight-green)', fontSize: '1.1rem' }}>Browser live preview</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-light)', fontWeight: 700 }}>Duration</div>
+                <div style={{ fontWeight: 800, color: 'var(--midnight-green)', fontSize: '1.1rem' }}>{status?.duration_seconds ?? 20}s</div>
               </div>
               <div style={metricStyle}>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-light)', fontWeight: 700 }}>Output</div>
-                <div style={{ fontWeight: 800, color: 'var(--midnight-green)', fontSize: '1.1rem' }}>Risk report + trajectories</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-light)', fontWeight: 700 }}>PID</div>
+                <div style={{ fontWeight: 800, color: 'var(--midnight-green)', fontSize: '1.1rem' }}>{status?.pid || '—'}</div>
               </div>
             </div>
           </div>
@@ -545,9 +491,10 @@ export default function WanderingDetection({ token, onLogout }) {
           {running && (
             <div style={{ marginBottom: '1.5rem', borderRadius: '18px', overflow: 'hidden', background: '#000', aspectRatio: '16 / 9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <video
-                src="http://localhost:8000/api/models/modelayoub/stream/"
+                src={`${API_BASE}/wandering/stream/?token=${token}`}
                 controls
                 autoPlay
+                muted
                 style={{ width: '100%', height: '100%', objectFit: 'contain' }}
               />
             </div>

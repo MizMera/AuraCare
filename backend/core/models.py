@@ -550,6 +550,91 @@ class AdherenceRiskScore(models.Model):
     def risk_color(self):
         return {'low': 'green', 'medium': 'orange', 'high': 'red'}.get(self.risk_level, 'grey')
 
+
+# ─────────────────────────────────────────────────────────────
+# Wandering Detection
+# ─────────────────────────────────────────────────────────────
+
+class WanderingDetection(models.Model):
+    """Store wandering detection results from trajectory analysis"""
+    RISK_LEVELS = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('critical', 'Critical'),
+    ]
+
+    resident = models.ForeignKey(
+        Resident,
+        on_delete=models.CASCADE,
+        related_name='wandering_detections',
+        null=True,
+        blank=True,
+    )
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    risk_score = models.FloatField()
+    risk_level = models.CharField(max_length=20, choices=RISK_LEVELS)
+
+    tortuosity = models.FloatField(null=True, blank=True)
+    turn_rate_per_min = models.FloatField(null=True, blank=True)
+    revisit_ratio = models.FloatField(null=True, blank=True)
+    speed_mean = models.FloatField(null=True, blank=True)
+    speed_std = models.FloatField(null=True, blank=True)
+    displacement = models.FloatField(null=True, blank=True)
+    idle_ratio = models.FloatField(null=True, blank=True)
+    max_speed = models.FloatField(null=True, blank=True)
+
+    trajectory_points = models.JSONField(default=list, blank=True)
+    feature_importance = models.JSONField(default=dict, blank=True)
+    explanation = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['resident', '-timestamp']),
+            models.Index(fields=['risk_level']),
+        ]
+
+    def __str__(self):
+        resident_name = self.resident.name if self.resident else 'Unknown'
+        return f'Wandering Detection - {resident_name} ({self.risk_level})'
+
+
+class WanderingAlert(models.Model):
+    """Store wandering alerts for caregivers"""
+    ALERT_LEVELS = [
+        ('info', 'Info'),
+        ('warning', 'Warning'),
+        ('alert', 'Alert'),
+        ('critical', 'Critical'),
+    ]
+
+    detection = models.OneToOneField(
+        WanderingDetection,
+        on_delete=models.CASCADE,
+        related_name='alert',
+    )
+    alert_level = models.CharField(max_length=20, choices=ALERT_LEVELS)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    acknowledged = models.BooleanField(default=False)
+    acknowledged_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='wandering_alerts_acknowledged',
+    )
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        resident_name = self.detection.resident.name if self.detection.resident else 'Unknown'
+        return f'Wandering Alert - {resident_name} ({self.alert_level})'
+
 # ── Glycémie & Diabète ────────────────────────────────────────
 
 class GlucoseReading(models.Model):

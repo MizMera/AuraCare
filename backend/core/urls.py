@@ -59,6 +59,14 @@ from .views import (
     AdherenceRiskHistoryView,
     RunAdherencePredictionView,
 )
+from .wandering_views import (
+    WanderingPipelineLaunchView,
+    WanderingPipelineUploadView,
+    WanderingPipelineStatusView,
+    WanderingPipelineArtifactsView,
+    WanderingPipelineStopView,
+    WanderingPipelineStreamView,
+)
 
 urlpatterns = [
     path('ingest/telemetry/', TelemetryIngestView.as_view(), name='ingest-telemetry'),
@@ -70,12 +78,6 @@ urlpatterns = [
     path('mobile/dashboard/', MobileDashboardView.as_view(), name='mobile-dashboard'),
     path('mobile/activity-log/', MobileActivityLogView.as_view(), name='mobile-activity-log'),
     path('mobile/facility-incidents/', MobileFacilityIncidentsView.as_view(), name='mobile-facility-incidents'),
-    path('models/modelayoub/launch/', ModelAyoubLaunchView.as_view(), name='modelayoub-launch'),
-    path('models/modelayoub/stop/', ModelAyoubStopView.as_view(), name='modelayoub-stop'),
-    path('models/modelayoub/status/', ModelAyoubStatusView.as_view(), name='modelayoub-status'),
-    path('models/modelayoub/artifacts/', ModelAyoubArtifactsView.as_view(), name='modelayoub-artifacts'),
-    path('models/modelayoub/upload/', ModelAyoubUploadView.as_view(), name='modelayoub-upload'),
-    path('models/modelayoub/stream/', ModelAyoubStreamView.as_view(), name='modelayoub-stream'),
     path('gait/ingest/', GaitIngestView.as_view(), name='gait-ingest'),
     path('gait/history/<int:resident_id>/', GaitHistoryView.as_view(), name='gait-history'),
     path('gait/all/', GaitAllResidentsView.as_view(), name='gait-all'),
@@ -107,6 +109,14 @@ urlpatterns = [
     path('stream/aggression/stop/', AggressionStreamStopView.as_view(), name='stream-aggression-stop'),
     path('stream/aggression/status/', AggressionStreamStatusView.as_view(), name='stream-aggression-status'),
     path('stream/aggression/feed/', aggression_stream_feed, name='stream-aggression-feed'),
+
+    # Wandering pipeline
+    path('wandering/launch/', WanderingPipelineLaunchView.as_view(), name='wandering-launch'),
+    path('wandering/upload/', WanderingPipelineUploadView.as_view(), name='wandering-upload'),
+    path('wandering/status/', WanderingPipelineStatusView.as_view(), name='wandering-status'),
+    path('wandering/artifacts/', WanderingPipelineArtifactsView.as_view(), name='wandering-artifacts'),
+    path('wandering/stop/', WanderingPipelineStopView.as_view(), name='wandering-stop'),
+    path('wandering/stream/', WanderingPipelineStreamView.as_view(), name='wandering-stream'),
 
     # Residents
     path('residents/', ResidentListView.as_view(), name='resident-list'),

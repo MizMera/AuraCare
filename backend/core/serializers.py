@@ -4,7 +4,7 @@ from django.contrib.auth.password_validation import validate_password
 from .fall_incident import record_fall_incident
 from .aggression_incident import record_aggression_incident
 from .utils import create_notifications_for_incident
-from .models import Device, HealthMetric, Incident, Resident, Zone, CustomUser, MealTime, Notification
+from .models import Device, HealthMetric, Incident, Resident, Zone, CustomUser, MealTime, Notification, WanderingDetection, WanderingAlert
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
@@ -99,6 +99,58 @@ class AggressionIncidentIngestSerializer(serializers.Serializer):
             validated_data['device_id'],
             validated_data.get('description', ''),
         )
+
+
+# ─────────────────────────────────────────────────────────────
+# Wandering Detection Serializers
+# ─────────────────────────────────────────────────────────────
+
+class WanderingDetectionSerializer(serializers.ModelSerializer):
+    resident_name = serializers.CharField(source='resident.name', read_only=True)
+    
+    class Meta:
+        model = WanderingDetection
+        fields = [
+            'id', 'resident', 'resident_name', 'timestamp',
+            'risk_score', 'risk_level',
+            'tortuosity', 'turn_rate_per_min', 'revisit_ratio',
+            'speed_mean', 'speed_std', 'displacement', 'idle_ratio', 'max_speed',
+            'trajectory_points', 'feature_importance', 'explanation'
+        ]
+        read_only_fields = ['id', 'timestamp']
+
+
+class WanderingAlertSerializer(serializers.ModelSerializer):
+    detection = WanderingDetectionSerializer(read_only=True)
+    acknowledged_by_username = serializers.CharField(source='acknowledged_by.username', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = WanderingAlert
+        fields = [
+            'id', 'detection', 'alert_level', 'timestamp',
+            'acknowledged', 'acknowledged_by', 'acknowledged_by_username',
+            'acknowledged_at', 'notes'
+        ]
+        read_only_fields = ['id', 'timestamp']
+
+
+class WanderingAlertCreateSerializer(serializers.Serializer):
+    """For creating alerts from trajectory data"""
+    resident_id = serializers.IntegerField()
+    trajectory = serializers.ListField(
+        child=serializers.DictField(child=serializers.FloatField()),
+        required=True
+    )
+
+
+class WanderingDetectionIngestSerializer(serializers.Serializer):
+    """Ingest wandering detection from external source"""
+    resident_id = serializers.IntegerField(required=False)
+    trajectory = serializers.ListField(
+        child=serializers.DictField(),
+        required=True
+    )
+    features = serializers.DictField(required=False)
 
 
 class ZoneSerializer(serializers.ModelSerializer):
